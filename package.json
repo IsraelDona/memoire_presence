@@ -15,8 +15,8 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "dev": "set CI=true && set PORT=300 && set BROWSER=none && react-scripts start",
+    "start": "set PORT=3000 && react-scripts start",
+    "dev": "set CI=true && set PORT=3000 && set BROWSER=none && react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

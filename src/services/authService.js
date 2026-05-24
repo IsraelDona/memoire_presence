@@ -21,6 +21,18 @@ function normalizeRole(role) {
   return value;
 }
 
+function readApiMessage(data, fallback = '') {
+  if (typeof data === 'string') {
+    return data.trim() || fallback;
+  }
+
+  if (data && typeof data === 'object') {
+    return String(data.message ?? data.error ?? data.detail ?? fallback).trim() || fallback;
+  }
+
+  return fallback;
+}
+
 function getRoleKey(role) {
   return normalizeRole(role).toLowerCase();
 }
@@ -49,6 +61,10 @@ function buildSession(payload = {}) {
     name: payload.nom ?? payload.name ?? '',
     email: payload.email ?? '',
   };
+}
+
+function hasAuthPayload(payload) {
+  return Boolean(payload && typeof payload === 'object' && payload.token && payload.role);
 }
 
 function getStoredSession() {
@@ -93,10 +109,34 @@ async function login(credentials) {
     motDePasse: credentials.motDePasse ?? credentials.password,
   };
 
-  const { data } = await api.post('/api/auth/login', payload);
-  const session = buildSession(data);
-  storeSession(session);
-  return session;
+  try {
+    const response = await api.post('/api/auth/login', payload);
+    const data = response?.data;
+    const message = readApiMessage(data, 'Connexion réussie');
+
+    if (hasAuthPayload(data)) {
+      const session = buildSession(data);
+      storeSession(session);
+      return {
+        kind: 'authenticated',
+        message,
+        session,
+      };
+    }
+
+    return {
+      kind: 'message',
+      message,
+      status: response?.status,
+    };
+  } catch (error) {
+    const message = readApiMessage(
+      error?.response?.data,
+      'Connexion impossible. Vérifie le backend Spring Boot et l’URL API.'
+    );
+
+    throw new Error(message);
+  }
 }
 
 async function registerAgent(payload) {
@@ -108,8 +148,21 @@ async function registerAgent(payload) {
     motDePasse: payload.motDePasse,
   };
 
-  const { data } = await api.post('/api/auth/register', body);
-  return data;
+  try {
+    const response = await api.post('/api/auth/register', body);
+    const message = readApiMessage(response?.data, 'Compte créé. En attente de validation admin.');
+    return {
+      message,
+      status: response?.status,
+    };
+  } catch (error) {
+    const message = readApiMessage(
+      error?.response?.data,
+      'Impossible de créer le compte. Vérifie le backend Spring Boot et l’URL API.'
+    );
+
+    throw new Error(message);
+  }
 }
 
 export {

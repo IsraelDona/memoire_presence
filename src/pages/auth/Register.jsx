@@ -119,6 +119,7 @@ function Register() {
       }, 900);
     } catch (requestError) {
       const apiMessage =
+        requestError?.message ||
         requestError?.response?.data?.message ||
         requestError?.response?.data?.error ||
         'Impossible de créer le compte. Vérifie la connexion au backend.';

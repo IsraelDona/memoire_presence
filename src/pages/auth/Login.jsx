@@ -51,14 +51,20 @@ function Login() {
     setIsSubmitting(true);
 
     try {
-      const session = await login({
+      const result = await login({
         email: email.trim(),
         motDePasse: password,
       });
 
-      navigate(getDashboardPath(session.role), { replace: true });
+      if (result?.kind === 'authenticated' && result.session) {
+        navigate(getDashboardPath(result.session.role), { replace: true });
+        return;
+      }
+
+      setSuccess(result?.message || 'Connexion prise en compte.');
     } catch (requestError) {
       const apiMessage =
+        requestError?.message ||
         requestError?.response?.data?.message ||
         requestError?.response?.data?.error ||
         'Connexion impossible. Vérifie tes identifiants ou la disponibilité du backend.';

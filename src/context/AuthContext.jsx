@@ -25,9 +25,13 @@ function AuthProvider({ children }) {
     const isAuthenticated = Boolean(user?.token);
 
     const login = async (credentials) => {
-      const session = await loginRequest(credentials);
-      setUser(session);
-      return session;
+      const result = await loginRequest(credentials);
+
+      if (result?.kind === 'authenticated' && result.session) {
+        setUser(result.session);
+      }
+
+      return result;
     };
 
     const register = async (payload) => registerRequest(payload);

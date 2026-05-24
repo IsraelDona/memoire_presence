@@ -1,70 +1,27 @@
-# Getting Started with Create React App
+# Configuration du Projet (Frontend & Backend)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Ce dépôt contient le frontend et le backend Eclipse. La base de données PostgreSQL se génère automatiquement au lancement du backend.
 
-## Available Scripts
+## 1. Prérequis pour la Base de Données
+1. Installez **PostgreSQL** sur votre machine.
+2. Ouvrez votre outil PostgreSQL (ex: pgAdmin) et créez une base de données **vide** (nommez-la comme vous le souhaitez, par exemple `mon_projet_db`).
 
-In the project directory, you can run:
+## 2. Configuration et Lancement du Backend (Eclipse)
+1. Ouvrez Eclipse.
+2. Allez dans **File** -> **Import** -> **Existing Maven Projects**.
+3. Sélectionnez le dossier `backend/` de ce dépôt.
+4. Ouvrez le fichier `src/main/resources/application.properties`.
+5. Modifiez les lignes suivantes avec vos propres identifiants PostgreSQL locaux :
+   ```properties
+   spring.datasource.url=jdbc:postgresql://localhost:5432/LE_NOM_DE_VOTRE_BASE_VIDE
+   spring.datasource.username=VOTRE_UTILISATEUR_POSTGRES
+   spring.datasource.password=VOTRE_MOT_DE_PASSE_POSTGRES
+   ```
+6. Faites un clic droit sur le projet -> **Run As** -> **Spring Boot App** (ou *Java Application*).
 
-### `npm start`
+*Note : Au premier démarrage, Hibernate va créer automatiquement toutes les tables nécessaires à l'authentification dans votre base PostgreSQL vide.*
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
-
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
-
-### `npm test`
-
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## 3. Lancement du Frontend
+1. Ouvrez un terminal dans le dossier `frontend/`.
+2. Installez les dépendances et lancez le serveur (ex: `npm install && npm start`).
+3. L'application est prête ! Vous pouvez créer un compte et vous connecter, le front communiquera directement avec le backend sur `http://localhost:8080`.
