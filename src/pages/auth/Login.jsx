@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import AuthShell from '../../components/auth/AuthShell';
+import FaceEnrollmentModal from '../../components/auth/FaceEnrollmentModal';
 import { useAuth } from '../../context/AuthContext';
-import { getDashboardPath } from '../../services/authService';
+import { getDashboardPath, normalizeRole } from '../../services/authService';
 
 function MailIcon() {
   return (
@@ -23,7 +23,7 @@ function LockIcon() {
 }
 
 function Login() {
-  const { isAuthenticated, login, user } = useAuth();
+  const { isAuthenticated, login, updateUser, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('');
@@ -31,18 +31,35 @@ function Login() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(location.state?.message ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFaceEnrollmentPending, setIsFaceEnrollmentPending] = useState(false);
+  const faceRedirectTimerRef = useRef(null);
+
+  const needsFaceEnrollment = Boolean(
+    isAuthenticated &&
+      normalizeRole(user?.role) === 'AGENT' &&
+      user?.visageEnregistre === false
+  );
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !needsFaceEnrollment && !isFaceEnrollmentPending) {
       navigate(getDashboardPath(user?.role), { replace: true });
     }
-  }, [isAuthenticated, navigate, user?.role]);
+  }, [isAuthenticated, needsFaceEnrollment, isFaceEnrollmentPending, navigate, user?.role]);
 
   useEffect(() => {
     if (location.state?.message) {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.pathname, location.state, navigate]);
+
+  useEffect(
+    () => () => {
+      if (faceRedirectTimerRef.current) {
+        window.clearTimeout(faceRedirectTimerRef.current);
+      }
+    },
+    []
+  );
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -57,6 +74,11 @@ function Login() {
       });
 
       if (result?.kind === 'authenticated' && result.session) {
+        if (normalizeRole(result.session.role) === 'AGENT' && result.session.visageEnregistre === false) {
+          setSuccess('Connexion validée. Enrôlement facial requis avant accès au tableau de bord.');
+          return;
+        }
+
         navigate(getDashboardPath(result.session.role), { replace: true });
         return;
       }
@@ -75,72 +97,98 @@ function Login() {
   };
 
   return (
-    <div className="auth-page auth-page-modern">
-      <AuthShell
-        eyebrow="Accès sécurisé"
-        title="Connexion professionnelle à la plateforme DGB"
-        description="Accède à ton espace en toute sécurité avec un compte actif. Les comptes agents doivent être validés avant activation."
-        highlights={[
-          { title: 'JWT', text: 'Session sécurisée et persistante.' },
-          { title: 'Rôles', text: 'Redirection automatique selon le profil.' },
-          { title: 'Validation', text: 'Accès réservé aux comptes actifs.' },
-        ]}
-      >
-        <div className="auth-card-panel">
-          <div className="auth-card-head">
-            <div>
-              <h2>Se connecter</h2>
-              <p>Utilise ton email professionnel et ton mot de passe.</p>
-            </div>
-            <span className="auth-status-pill">Connexion sécurisée</span>
-          </div>
-
-          <form onSubmit={handleSubmit} className="auth-form">
-            <label className="field-input-wrap">
-              <span className="field-icon">
-                <MailIcon />
-              </span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email professionnel"
-                autoComplete="email"
-                required
-              />
-            </label>
-
-            <label className="field-input-wrap">
-              <span className="field-icon">
-                <LockIcon />
-              </span>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mot de passe"
-                autoComplete="current-password"
-                required
-              />
-            </label>
-
-            {error && <div className="form-error">{error}</div>}
-            {success && <div className="form-success">{success}</div>}
-
-            <button type="submit" className="primary-button full-width auth-submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Connexion en cours...' : 'Se connecter'}
-            </button>
-          </form>
-
-          <div className="auth-card-footer">
-            <Link to="/register" className="link-muted">
-              Nouveau compte agent ? <strong>Demander un accès</strong>
-            </Link>
-          </div>
-        </div>
-      </AuthShell>
+  <div className="auth-dgb-page">
+    <div className="auth-dgb-left">
+      <div className="auth-dgb-brand">
+        <span className="auth-dgb-mark">DGB</span>
+        <span className="auth-dgb-sub">e-presence</span>
+      </div>
+      <h1>Bienvenue sur la plateforme de présence</h1>
+      <p>Accédez à votre espace personnel sécurisé. Session JWT, redirection automatique selon votre rôle.</p>
+      <div className="auth-dgb-pills">
+        <span>🔐 JWT sécurisé</span>
+        <span>👤 3 rôles</span>
+        <span>📍 GPS actif</span>
+      </div>
     </div>
-  );
+
+    <div className="auth-dgb-right">
+      <div className="auth-dgb-card">
+        <div className="auth-dgb-card-head">
+          <h2>Se connecter</h2>
+          <p>Email professionnel et mot de passe</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="auth-dgb-form">
+          <label className="field-input-wrap">
+            <span className="field-icon"><MailIcon /></span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email professionnel"
+              autoComplete="email"
+              required
+            />
+          </label>
+
+          <label className="field-input-wrap">
+            <span className="field-icon"><LockIcon /></span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mot de passe"
+              autoComplete="current-password"
+              required
+            />
+          </label>
+
+          {error && <div className="form-error">{error}</div>}
+          {success && <div className="form-success">{success}</div>}
+
+          <button
+            type="submit"
+            className="auth-dgb-submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Connexion...' : 'Se connecter'}
+          </button>
+        </form>
+
+        <div className="auth-dgb-footer">
+          <Link to="/register" className="link-muted">
+            Pas encore de compte ? <strong>Demander un accès</strong>
+          </Link>
+        </div>
+      </div>
+    </div>
+
+    <FaceEnrollmentModal
+      open={needsFaceEnrollment}
+      userName={user?.name || 'agent'}
+      onClose={() => {
+        setError("L'enrôlement facial est obligatoire avant accès à la plateforme.");
+      }}
+      onSuccess={(result) => {
+        setError('');
+        setIsFaceEnrollmentPending(true);
+        setSuccess('Visage enregistré. Redirection...');
+        if (faceRedirectTimerRef.current) {
+          window.clearTimeout(faceRedirectTimerRef.current);
+        }
+        faceRedirectTimerRef.current = window.setTimeout(() => {
+          updateUser({
+            visageEnregistre: true,
+            photoVisage: result?.photoVisage || user?.photoVisage || '',
+          });
+          setIsFaceEnrollmentPending(false);
+          navigate(getDashboardPath(user?.role), { replace: true });
+        }, 1400);
+      }}
+    />
+  </div>
+);
 }
 
 export default Login;

@@ -42,6 +42,45 @@ async function fetchEquipePresences() {
   };
 }
 
+
+async function fetchChefMissions() {
+  const response = await api.get('/api/chef-service/missions');
+
+  return {
+    missions: normalizeList(response?.data),
+    message: readApiMessage(response?.data, 'Missions chargées'),
+    status: response?.status,
+  };
+}
+
+async function createChefMission(payload) {
+  const response = await api.post('/api/chef-service/missions', payload);
+
+  return {
+    message: readApiMessage(response?.data, 'Mission créée avec succès'),
+    status: response?.status,
+  };
+}
+
+async function fetchChefReunions() {
+  const response = await api.get('/api/chef-service/reunions');
+
+  return {
+    reunions: normalizeList(response?.data),
+    message: readApiMessage(response?.data, 'Réunions chargées'),
+    status: response?.status,
+  };
+}
+
+async function createChefReunion(payload) {
+  const response = await api.post('/api/chef-service/reunions', payload);
+
+  return {
+    message: readApiMessage(response?.data, 'Réunion créée avec succès'),
+    status: response?.status,
+  };
+}
+
 async function fetchJustificatifsChef() {
   const response = await api.get('/api/chef-service/justificatifs');
 
@@ -53,6 +92,10 @@ async function fetchJustificatifsChef() {
 }
 
 export {
+  createChefMission,
+  createChefReunion,
+  fetchChefMissions,
+  fetchChefReunions,
   fetchEquipePresences,
   fetchJustificatifsChef,
 };

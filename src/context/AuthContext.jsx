@@ -13,6 +13,7 @@ function AuthProvider({ children }) {
   const [user, setUser] = useState(() => getStoredSession());
 
   useEffect(() => {
+
     const handleUnauthorized = () => {
       setUser(null);
     };
@@ -41,12 +42,30 @@ function AuthProvider({ children }) {
       setUser(null);
     };
 
+    // Dans ton AuthContext.jsx
+    const updateUser = (newUserData) => {
+      setUser((prevUser) => {
+        const updatedUser = {
+          ...prevUser,
+          ...newUserData,
+        };
+
+        localStorage.setItem(
+          'e-presence.user',
+          JSON.stringify(updatedUser)
+        );
+
+        return updatedUser;
+      });
+    };
+
     return {
       user,
       isAuthenticated,
       login,
       register,
       logout,
+      updateUser,
     };
   }, [user]);
 

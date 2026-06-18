@@ -46,7 +46,7 @@ async function marquerPresence(payload) {
       status === 400
         ? "Vous avez déjà pointé aujourd'hui."
         : status === 403
-          ? 'Accès refusé. Vérifie que ton compte est actif et validé.'
+          ? 'Pointage refusé par le backend.'
           : 'Impossible de marquer la présence. Vérifie ta connexion.';
 
     throw new Error(readApiMessage(error?.response?.data, fallback));

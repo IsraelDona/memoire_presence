@@ -33,6 +33,16 @@ function readApiMessage(data, fallback = '') {
   return fallback;
 }
 
+function readOptionalBoolean(payload, keys) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) {
+      return Boolean(payload[key]);
+    }
+  }
+
+  return undefined;
+}
+
 function getRoleKey(role) {
   return normalizeRole(role).toLowerCase();
 }
@@ -53,6 +63,7 @@ function getDashboardPath(role) {
 
 function buildSession(payload = {}) {
   const role = normalizeRole(payload.role);
+  const visageEnregistre = readOptionalBoolean(payload, ['visageEnregistre', 'visage_enregistre']);
 
   return {
     token: payload.token ?? '',
@@ -60,6 +71,10 @@ function buildSession(payload = {}) {
     roleKey: getRoleKey(role),
     name: payload.nom ?? payload.name ?? '',
     email: payload.email ?? '',
+    visageEnregistre,
+    photoVisage: payload.photoVisage ?? payload.photo_visage ?? '',
+    
+    photoProfil: payload.photoProfil ?? payload.photo_profil ?? '',
   };
 }
 

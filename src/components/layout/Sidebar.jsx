@@ -79,7 +79,8 @@ const ICONS = {
   profile: <ProfileIcon />,
 };
 
-function Sidebar({ activePage, onChangePage, items = [] }) {
+function Sidebar({ activePage, onChangePage, items = [], user, onLogout }) {
+  console.log('USER DANS SIDEBAR:', user);
   return (
     <aside className="dashboard-sidebar">
       <div className="sidebar-brand">
@@ -102,6 +103,43 @@ function Sidebar({ activePage, onChangePage, items = [] }) {
           </button>
         ))}
       </nav>
+      <div className="sidebar-footer">
+        <div className="sidebar-user-card">
+
+          {user?.photoProfil ? (
+            <img
+              src={user.photoProfil}
+              alt={user.nom}
+              className="sidebar-avatar"
+            />
+          ) : (
+            <div className="sidebar-avatar-placeholder">
+              {(user?.prenom || user?.nom || 'U')
+                .charAt(0)
+                .toUpperCase()}
+            </div>
+          )}
+
+          <div className="sidebar-user-info">
+            <strong>
+              {user?.prenom} {user?.nom}
+            </strong>
+
+            <span>
+              {user?.role}
+            </span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="sidebar-logout-btn"
+          onClick={onLogout}
+        >
+          Déconnexion
+        </button>
+      </div>
+
     </aside>
   );
 }

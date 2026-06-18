@@ -74,8 +74,15 @@ async function creerChefService(payload) {
   };
 }
 
+async function fetchStatistiquesGlobales() {
+  const response = await api.get('/api/admin/statistiques-globales');
+
+  return response.data;
+}
+
 export {
   creerChefService,
   fetchDemandesComptes,
+  fetchStatistiquesGlobales,
   traiterDemandeCompte,
 };

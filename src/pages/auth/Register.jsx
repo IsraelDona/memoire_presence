@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import AuthShell from '../../components/auth/AuthShell';
+
 import { useAuth } from '../../context/AuthContext';
 
 function UserIcon() {
@@ -130,133 +130,89 @@ function Register() {
   };
 
   return (
-    <div className="auth-page auth-page-modern">
-      <AuthShell
-        eyebrow="Demande de compte"
-        title="Créer un compte agent, proprement"
-        description="La demande est envoyée à l’administration. Le compte restera inactif tant qu’il n’est pas validé par l’admin."
-        highlights={[
-          { title: 'Validation', text: 'Activation manuelle par l’admin.' },
-          { title: 'Sécurité', text: 'Aucun compte actif sans contrôle.' },
-          { title: 'Clarté', text: 'Parcours simple et sans bruit visuel.' },
-        ]}
-      >
-        <div className="auth-card-panel">
-          <div className="auth-card-head">
-            <div>
-              <h2>Demande d’inscription</h2>
-              <p>Renseigne les informations professionnelles de l’agent.</p>
-            </div>
-            <span className="auth-status-pill auth-status-pill-soft">En attente de validation</span>
-          </div>
-
-          <form onSubmit={handleSubmit} className="auth-form auth-form-register">
-            <div className="auth-grid-two">
-              <label className="field-input-wrap">
-                <span className="field-icon">
-                  <UserIcon />
-                </span>
-                <input
-                  name="nom"
-                  type="text"
-                  value={form.nom}
-                  onChange={handleChange}
-                  placeholder="Nom"
-                  autoComplete="family-name"
-                  required
-                />
-              </label>
-
-              <label className="field-input-wrap">
-                <span className="field-icon">
-                  <UserIcon />
-                </span>
-                <input
-                  name="prenom"
-                  type="text"
-                  value={form.prenom}
-                  onChange={handleChange}
-                  placeholder="Prénom"
-                  autoComplete="given-name"
-                  required
-                />
-              </label>
-            </div>
-
-            <label className="field-input-wrap">
-              <span className="field-icon">
-                <MailIcon />
-              </span>
-              <input
-                name="email"
-                type="email"
-                value={form.email}
-                onChange={handleChange}
-                placeholder="Email professionnel"
-                autoComplete="email"
-                required
-              />
-            </label>
-
-            <label className="field-input-wrap">
-              <span className="field-icon">
-                <PhoneIcon />
-              </span>
-              <input
-                name="telephone"
-                type="tel"
-                value={form.telephone}
-                onChange={handleChange}
-                placeholder="Téléphone"
-                autoComplete="tel"
-                required
-              />
-            </label>
-
-            <label className="field-input-wrap">
-              <span className="field-icon">
-                <LockIcon />
-              </span>
-              <input
-                name="motDePasse"
-                type="password"
-                value={form.motDePasse}
-                onChange={handleChange}
-                placeholder="Mot de passe"
-                autoComplete="new-password"
-                required
-              />
-            </label>
-
-            <label className="field-input-wrap field-input-wrap-plain">
-              <input
-                name="confirmMotDePasse"
-                type="password"
-                value={form.confirmMotDePasse}
-                onChange={handleChange}
-                placeholder="Confirmer le mot de passe"
-                autoComplete="new-password"
-                required
-              />
-            </label>
-
-            {error && <div className="form-error">{error}</div>}
-            {success && <div className="form-success">{success}</div>}
-
-            <button type="submit" className="primary-button full-width auth-submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Envoi en cours...' : 'Soumettre la demande'}
-            </button>
-          </form>
-
-          <div className="auth-card-footer">
-            <Link to="/login" className="link-muted">
-              Déjà un compte ? <strong>Retour à la connexion</strong>
-            </Link>
-          </div>
-        </div>
-      </AuthShell>
+  <div className="auth-dgb-page">
+    <div className="auth-dgb-left">
+      <div className="auth-dgb-brand">
+        <span className="auth-dgb-mark">DGB</span>
+        <span className="auth-dgb-sub">e-presence</span>
+      </div>
+      <h1>Rejoindre la plateforme DGB</h1>
+      <p>Soumettez votre demande. Votre compte sera activé après validation par l'administrateur.</p>
+      <div className="auth-dgb-pills">
+        <span>✅ Validation admin</span>
+        <span>🔒 Compte sécurisé</span>
+        <span>📧 Notification mail</span>
+      </div>
     </div>
-  );
+
+    <div className="auth-dgb-right">
+      <div className="auth-dgb-card">
+        <div className="auth-dgb-card-head">
+          <h2>Demande d'inscription</h2>
+          <p>Informations professionnelles de l'agent</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="auth-dgb-form">
+          <div className="auth-grid-two">
+            <label className="field-input-wrap">
+              <span className="field-icon"><UserIcon /></span>
+              <input name="nom" type="text" value={form.nom}
+                onChange={handleChange} placeholder="Nom"
+                autoComplete="family-name" required />
+            </label>
+            <label className="field-input-wrap">
+              <span className="field-icon"><UserIcon /></span>
+              <input name="prenom" type="text" value={form.prenom}
+                onChange={handleChange} placeholder="Prénom"
+                autoComplete="given-name" required />
+            </label>
+          </div>
+
+          <label className="field-input-wrap">
+            <span className="field-icon"><MailIcon /></span>
+            <input name="email" type="email" value={form.email}
+              onChange={handleChange} placeholder="Email professionnel"
+              autoComplete="email" required />
+          </label>
+
+          <label className="field-input-wrap">
+            <span className="field-icon"><PhoneIcon /></span>
+            <input name="telephone" type="tel" value={form.telephone}
+              onChange={handleChange} placeholder="Téléphone"
+              autoComplete="tel" required />
+          </label>
+
+          <label className="field-input-wrap">
+            <span className="field-icon"><LockIcon /></span>
+            <input name="motDePasse" type="password" value={form.motDePasse}
+              onChange={handleChange} placeholder="Mot de passe"
+              autoComplete="new-password" required />
+          </label>
+
+          <label className="field-input-wrap field-input-wrap-plain">
+            <input name="confirmMotDePasse" type="password"
+              value={form.confirmMotDePasse} onChange={handleChange}
+              placeholder="Confirmer le mot de passe"
+              autoComplete="new-password" required />
+          </label>
+
+          {error && <div className="form-error">{error}</div>}
+          {success && <div className="form-success">{success}</div>}
+
+          <button type="submit" className="auth-dgb-submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Envoi...' : 'Soumettre la demande'}
+          </button>
+        </form>
+
+        <div className="auth-dgb-footer">
+          <Link to="/login" className="link-muted">
+            Déjà un compte ? <strong>Se connecter</strong>
+          </Link>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 }
 
 export default Register;

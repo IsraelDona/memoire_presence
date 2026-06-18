@@ -1,8 +1,0 @@
-com\monprojet\enums\RoleName.class
-com\monprojet\entity\Role.class
-com\monprojet\entity\Utilisateur.class
-com\monprojet\config\SecurityConfig.class
-com\monprojet\dto\LoginRequest.class
-com\monprojet\repository\UtilisateurRepository.class
-com\monprojet\repository\RoleRepository.class
-com\monprojet\PresenceApplication.class

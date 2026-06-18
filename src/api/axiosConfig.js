@@ -1,42 +1,35 @@
 import axios from 'axios';
 
-const TOKEN_STORAGE_KEY = 'e-presence.token';
-const AUTH_UNAUTHORIZED_EVENT = 'e-presence:unauthorized';
+const AUTH_UNAUTHORIZED_EVENT = 'e-presence:auth-unauthorized';
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8080',
+  baseURL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-api.interceptors.request.use(
-  (config) => {
-    if (typeof window !== 'undefined') {
-      const token = window.localStorage.getItem(TOKEN_STORAGE_KEY);
-      if (token) {
-        config.headers = config.headers || {};
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    }
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('e-presence.token');
 
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  } else if (config.headers && config.headers.Authorization) {
+    delete config.headers.Authorization;
+  }
+
+  return config;
+});
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error?.response?.status === 401 && typeof window !== 'undefined') {
-      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-      window.localStorage.removeItem('e-presence.user');
-      window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-    }
-
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-export { AUTH_UNAUTHORIZED_EVENT, TOKEN_STORAGE_KEY };
+export function emitAuthUnauthorized() {
+  window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
+}
+
+export { AUTH_UNAUTHORIZED_EVENT };
 export default api;

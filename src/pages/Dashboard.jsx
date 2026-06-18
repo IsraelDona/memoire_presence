@@ -1,25 +1,33 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Sidebar from '../components/layout/Sidebar';
+import FaceVerificationModal from '../components/auth/FaceVerificationModal';
 import { normalizeRole } from '../services/authService';
-import { fetchEquipePresences, fetchJustificatifsChef } from '../services/chefService';
+import {
+  fetchMesJustificatifs,
+  submitJustificatif,
+} from '../services/agentService';
+import {
+  createChefMission,
+  createChefReunion,
+  fetchChefMissions,
+  fetchChefReunions,
+  fetchEquipePresences,
+  fetchJustificatifsChef,
+} from '../services/chefService';
 import { fetchMesPresences, marquerPresence } from '../services/presenceService';
+import { genererAnalyseIA, fetchMesAnalysesIA } from '../services/analyseIAService';
+import Notifications from '../components/notifications/Notifications';
+import PresenceMap from '../components/map/PresenceMap';
+import { useAuth } from '../context/AuthContext';
+import '../styles/dashboard.css';
+import {
+  updateMonProfil,
+  updatePhotoProfil
+} from '../services/profilService';
+import PhotoUploadInput from '../components/profil/PhotoUploadInput';
+
 
 const ROLE_CONTENT = {
-  ADMIN: {
-    title: 'Administrateur',
-    subtitle: 'Pilotage global de la plateforme',
-    summary: 'Gestion des comptes, activation des agents, configuration et supervision des accès.',
-    highlights: [
-      { label: 'Responsabilité', value: 'Validation des comptes et gouvernance des accès' },
-      { label: 'Priorité', value: 'Structurer les utilisateurs et préparer les workflows métiers' },
-      { label: 'Statut', value: 'Accès administrateur actif' },
-    ],
-    items: [
-      { key: 'overview', label: 'Vue générale', icon: 'grid' },
-      { key: 'activation', label: 'Validation comptes', icon: 'check' },
-      { key: 'logs', label: 'Journaux système', icon: 'report' },
-    ],
-  },
   CHEF_SERVICE: {
     title: 'Chef de service',
     subtitle: 'Supervision des agents du service',
@@ -36,6 +44,7 @@ const ROLE_CONTENT = {
       { key: 'operations', label: 'Missions & réunions', icon: 'document' },
       { key: 'historique', label: 'Historique & analyses', icon: 'report' },
       { key: 'justificatifs', label: 'Justificatifs', icon: 'document' },
+      { key: 'parametres', label: 'Paramètres', icon: 'settings' },
     ],
   },
   AGENT: {
@@ -51,7 +60,9 @@ const ROLE_CONTENT = {
       { key: 'overview', label: 'Vue générale', icon: 'grid' },
       { key: 'pointage', label: 'Marquer présence', icon: 'check' },
       { key: 'historique', label: 'Historique', icon: 'history' },
+      { key: 'analyseIA', label: 'Analyse IA', icon: 'report' },
       { key: 'demandes', label: 'Demandes', icon: 'document' },
+      { key: 'parametres', label: 'Paramètres', icon: 'settings' },
     ],
   },
 };
@@ -91,9 +102,6 @@ function MapPinIcon() {
   );
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
 
 function calculateDistanceKm(start, end) {
   if (!start || !end) {
@@ -128,22 +136,10 @@ function formatDistanceLabel(distanceKm) {
     return 'Position en attente';
   }
 
-  if (distanceKm <= MINISTRY_ZONE.radiusKm) {
-    return `Dans la zone autorisée (${distanceKm.toFixed(2)} km)`;
-  }
-
-  return `Hors zone (${distanceKm.toFixed(2)} km)`;
+  return `Distance estimée au ministère: ${distanceKm.toFixed(2)} km`;
 }
 
-function buildMapMarkerStyle(position) {
-  const latDelta = position.latitude - MINISTRY_ZONE.latitude;
-  const lonDelta = position.longitude - MINISTRY_ZONE.longitude;
 
-  return {
-    left: `${clamp(50 + lonDelta * 1700, 14, 86)}%`,
-    top: `${clamp(50 - latDelta * 1700, 14, 86)}%`,
-  };
-}
 
 function formatDateTime(value) {
   if (!value) {
@@ -219,6 +215,7 @@ function getPosition() {
         resolve({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
         });
       },
       () => reject(new Error('Impossible de récupérer la position GPS. Autorise la localisation.')),
@@ -232,24 +229,94 @@ function getPosition() {
 }
 
 function Dashboard({ user }) {
+  const { updateUser, logout } = useAuth();
   const [activePage, setActivePage] = useState('overview');
   const [history, setHistory] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [historyFeedback, setHistoryFeedback] = useState(null);
+  const [agentJustificatifs, setAgentJustificatifs] = useState([]);
+  const [isLoadingAgentJustificatifs, setIsLoadingAgentJustificatifs] = useState(false);
+  const [agentJustificatifsFeedback, setAgentJustificatifsFeedback] = useState(null);
+  const [isSubmittingAgentJustificatif, setIsSubmittingAgentJustificatif] = useState(false);
+  const [agentJustificatifForm, setAgentJustificatifForm] = useState({
+    typeJustificatif: '',
+    motif: '',
+    dateDebut: '',
+    dateFin: '',
+  });
   const [pointageFeedback, setPointageFeedback] = useState(null);
   const [isSubmittingPointage, setIsSubmittingPointage] = useState(false);
   const [pointageType, setPointageType] = useState(DEFAULT_POINTAGE);
   const [currentPosition, setCurrentPosition] = useState(null);
+  const [isFaceVerificationOpen, setIsFaceVerificationOpen] = useState(false);
   const [chefPresences, setChefPresences] = useState([]);
   const [isLoadingChefPresences, setIsLoadingChefPresences] = useState(false);
   const [chefPresencesFeedback, setChefPresencesFeedback] = useState(null);
+  const [chefMissions, setChefMissions] = useState([]);
+  const [chefReunions, setChefReunions] = useState([]);
+  const [isLoadingChefOperations, setIsLoadingChefOperations] = useState(false);
+  const [chefOperationsFeedback, setChefOperationsFeedback] = useState(null);
+  const [isSubmittingMission, setIsSubmittingMission] = useState(false);
+  const [isSubmittingReunion, setIsSubmittingReunion] = useState(false);
+  const [missionForm, setMissionForm] = useState({
+    titre: '',
+    description: '',
+    agentAssigne: '',
+    echeance: '',
+  });
+  const [reunionForm, setReunionForm] = useState({
+    titre: '',
+    ordreDuJour: '',
+    lieu: '',
+    dateReunion: '',
+  });
   const [chefJustificatifs, setChefJustificatifs] = useState([]);
   const [isLoadingChefJustificatifs, setIsLoadingChefJustificatifs] = useState(false);
   const [chefJustificatifsFeedback, setChefJustificatifsFeedback] = useState(null);
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
+  const [hasLoadedAgentJustificatifs, setHasLoadedAgentJustificatifs] = useState(false);
+  const [hasLoadedChefPresences, setHasLoadedChefPresences] = useState(false);
+  const [hasLoadedChefOperations, setHasLoadedChefOperations] = useState(false);
+  const [hasLoadedChefJustificatifs, setHasLoadedChefJustificatifs] = useState(false);
+  const [analysesIA, setAnalysesIA] = useState([]);
+  const [isLoadingAnalysesIA, setIsLoadingAnalysesIA] = useState(false);
+  const [analysesIAFeedback, setAnalysesIAFeedback] = useState(null);
+  const [isGeneratingAnalyseIA, setIsGeneratingAnalyseIA] = useState(false);
+  const [hasLoadedAnalysesIA, setHasLoadedAnalysesIA] = useState(false);
+
+  const [profilForm, setProfilForm] = useState({
+    nom: '',
+    prenom: '',
+    email: '',
+    motDePasse: '',
+  });
+  const [profilFeedback, setProfilFeedback] = useState(null);
+  const [isUpdatingProfil, setIsUpdatingProfil] = useState(false);
+
+
+  const [isNotificationsOpen, setIsNotificationsOpen] =
+    useState(false);
+  const [notificationsCount, setNotificationsCount] =
+    useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleNotificationsCountChange = (
+    count
+  ) => {
+    setNotificationsCount(count);
+  };
 
   const roleKey = normalizeRole(user?.roleKey ?? user?.role);
   const roleContent = ROLE_CONTENT[roleKey] ?? ROLE_CONTENT.AGENT;
   const canPoint = roleKey === 'AGENT' || roleKey === 'CHEF_SERVICE';
+
+  useEffect(() => {
+    setHasLoadedHistory(false);
+    setHasLoadedAgentJustificatifs(false);
+    setHasLoadedChefPresences(false);
+    setHasLoadedChefOperations(false);
+    setHasLoadedChefJustificatifs(false);
+  }, [roleKey]);
 
   const loadHistory = useCallback(async ({ silent = false } = {}) => {
     if (!canPoint) {
@@ -274,6 +341,7 @@ function Dashboard({ user }) {
       if (!silent) {
         setIsLoadingHistory(false);
       }
+      setHasLoadedHistory(true);
     }
   }, [canPoint]);
 
@@ -284,10 +352,50 @@ function Dashboard({ user }) {
   }, [canPoint, loadHistory]);
 
   useEffect(() => {
-    if (canPoint && activePage === 'historique' && history.length === 0 && !isLoadingHistory) {
+    if (canPoint && activePage === 'historique' && !isLoadingHistory && !hasLoadedHistory) {
       loadHistory();
     }
-  }, [activePage, canPoint, history.length, isLoadingHistory, loadHistory]);
+  }, [activePage, canPoint, hasLoadedHistory, isLoadingHistory, loadHistory]);
+
+  const loadAgentJustificatifs = useCallback(async ({ silent = false } = {}) => {
+    if (roleKey !== 'AGENT') {
+      return;
+    }
+
+    if (!silent) {
+      setIsLoadingAgentJustificatifs(true);
+    }
+
+    try {
+      const response = await fetchMesJustificatifs();
+      setAgentJustificatifs(response.justificatifs);
+      setAgentJustificatifsFeedback(null);
+    } catch (error) {
+      setAgentJustificatifs([]);
+      setAgentJustificatifsFeedback({
+        type: 'error',
+        message: error?.message || 'Impossible de charger les demandes et justificatifs.',
+      });
+    } finally {
+      if (!silent) {
+        setIsLoadingAgentJustificatifs(false);
+      }
+      setHasLoadedAgentJustificatifs(true);
+    }
+  }, [roleKey]);
+
+  useEffect(() => {
+    if (roleKey === 'AGENT') {
+      loadAgentJustificatifs({ silent: true });
+    }
+  }, [loadAgentJustificatifs, roleKey]);
+
+  useEffect(() => {
+    if (roleKey === 'AGENT' && activePage === 'demandes' && !isLoadingAgentJustificatifs
+      && !hasLoadedAgentJustificatifs) {
+      loadAgentJustificatifs();
+    }
+  }, [activePage, hasLoadedAgentJustificatifs, isLoadingAgentJustificatifs, loadAgentJustificatifs, roleKey]);
 
   const loadChefPresences = useCallback(async ({ silent = false } = {}) => {
     if (roleKey !== 'CHEF_SERVICE') {
@@ -312,6 +420,104 @@ function Dashboard({ user }) {
       if (!silent) {
         setIsLoadingChefPresences(false);
       }
+      setHasLoadedChefPresences(true);
+    }
+  }, [roleKey]);
+
+  useEffect(() => {
+    if (!profilFeedback) return;
+
+    const timer = setTimeout(() => {
+      setProfilFeedback(null);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [profilFeedback]);
+
+  const handleProfilSubmit = async (event) => {
+    event.preventDefault();
+
+    setProfilFeedback(null);
+    setIsUpdatingProfil(true);
+
+    try {
+      const updatedProfile = await updateMonProfil({
+        nom: profilForm.nom || undefined,
+        prenom: profilForm.prenom || undefined,
+        email: profilForm.email || undefined,
+        motDePasse: profilForm.motDePasse || undefined,
+      });
+      console.log("updatedProfile =", updatedProfile);
+
+      const updatedUser = {
+        name:
+          updatedProfile?.nom
+            ? `${updatedProfile.nom} ${updatedProfile.prenom}`
+            : `${profilForm.nom || ''} ${profilForm.prenom || ''}`.trim(),
+
+        email:
+          updatedProfile?.email ||
+          profilForm.email,
+      };
+
+      updateUser(updatedUser);
+
+      setProfilFeedback({
+        type: 'success',
+        message: 'Profil mis à jour avec succès.',
+      });
+
+      setProfilForm({
+        nom: '',
+        prenom: '',
+        email: '',
+        motDePasse: '',
+      });
+
+    } catch (error) {
+      setProfilFeedback({
+        type: 'error',
+        message:
+          error?.message ||
+          'Impossible de mettre à jour le profil.',
+      });
+    } finally {
+      setIsUpdatingProfil(false);
+    }
+  };
+
+
+
+  const loadChefOperations = useCallback(async ({ silent = false } = {}) => {
+    if (roleKey !== 'CHEF_SERVICE') {
+      return;
+    }
+
+    if (!silent) {
+      setIsLoadingChefOperations(true);
+    }
+
+    try {
+      const [missionsResponse, reunionsResponse] = await Promise.all([
+        fetchChefMissions(),
+        fetchChefReunions(),
+      ]);
+
+      setChefMissions(missionsResponse.missions);
+      setChefReunions(reunionsResponse.reunions);
+      setChefOperationsFeedback(null);
+    } catch (error) {
+      setChefMissions([]);
+      setChefReunions([]);
+      setChefOperationsFeedback({
+        type: 'error',
+        message: error?.message || 'Impossible de charger les missions et réunions.',
+      });
+    } finally {
+      if (!silent) {
+        setIsLoadingChefOperations(false);
+      }
+      setHasLoadedChefOperations(true);
     }
   }, [roleKey]);
 
@@ -338,56 +544,161 @@ function Dashboard({ user }) {
       if (!silent) {
         setIsLoadingChefJustificatifs(false);
       }
+      setHasLoadedChefJustificatifs(true);
     }
   }, [roleKey]);
+
+  const loadAnalysesIA = useCallback(async ({ silent = false } = {}) => {
+    if (roleKey !== 'AGENT') {
+      return;
+    }
+
+    if (!silent) {
+      setIsLoadingAnalysesIA(true);
+    }
+
+    try {
+      const data = await fetchMesAnalysesIA();
+      setAnalysesIA(data);
+      setAnalysesIAFeedback(null);
+    } catch (error) {
+      setAnalysesIA([]);
+      setAnalysesIAFeedback({
+        type: 'error',
+        message: error?.message || 'Impossible de charger les analyses IA.',
+      });
+    } finally {
+      if (!silent) {
+        setIsLoadingAnalysesIA(false);
+      }
+      setHasLoadedAnalysesIA(true);
+    }
+  }, [roleKey]);
+
+  const handleGenererAnalyseIA = async () => {
+    try {
+      setIsGeneratingAnalyseIA(true);
+
+      const nouvelleAnalyse = await genererAnalyseIA();
+
+      setAnalysesIA((current) => [
+        nouvelleAnalyse,
+        ...current,
+      ]);
+
+      setAnalysesIAFeedback({
+        type: 'success',
+        message: 'Analyse IA générée avec succès.',
+      });
+
+    } catch (error) {
+      setAnalysesIAFeedback({
+        type: 'error',
+        message:
+          error?.response?.data?.message ||
+          'Une analyse IA a déjà été générée aujourd’hui.',
+      });
+    } finally {
+      setIsGeneratingAnalyseIA(false);
+    }
+  };
+
+
+  const hasAnalysisTodayIA = () => {
+    const today = new Date().toISOString().split('T')[0];
+
+    return analysesIA.some((analyse) => {
+      if (!analyse.dateAnalyse) {
+        return false;
+      }
+
+      return analyse.dateAnalyse.startsWith(today);
+    });
+  };
+
 
   useEffect(() => {
     if (roleKey === 'CHEF_SERVICE') {
       loadChefPresences({ silent: true });
+      loadChefOperations({ silent: true });
     }
-  }, [loadChefPresences, roleKey]);
+  }, [loadChefOperations, loadChefPresences, roleKey]);
 
   useEffect(() => {
-    if (roleKey === 'CHEF_SERVICE' && activePage === 'presences' && chefPresences.length === 0 && !isLoadingChefPresences) {
+    if (roleKey === 'CHEF_SERVICE' && activePage === 'presences' && !isLoadingChefPresences && !hasLoadedChefPresences) {
       loadChefPresences();
     }
-  }, [activePage, chefPresences.length, isLoadingChefPresences, loadChefPresences, roleKey]);
+  }, [activePage, hasLoadedChefPresences, isLoadingChefPresences, loadChefPresences, roleKey]);
 
   useEffect(() => {
-    if (roleKey === 'CHEF_SERVICE' && activePage === 'justificatifs' && chefJustificatifs.length === 0 && !isLoadingChefJustificatifs) {
+    if (
+      roleKey === 'CHEF_SERVICE' &&
+      activePage === 'operations' &&
+      !isLoadingChefOperations &&
+      !hasLoadedChefOperations
+    ) {
+      loadChefOperations();
+    }
+  }, [activePage, hasLoadedChefOperations, isLoadingChefOperations, loadChefOperations, roleKey]);
+
+  useEffect(() => {
+    if (roleKey === 'CHEF_SERVICE' && activePage === 'justificatifs' && !isLoadingChefJustificatifs && !hasLoadedChefJustificatifs) {
       loadChefJustificatifs();
     }
-  }, [activePage, chefJustificatifs.length, isLoadingChefJustificatifs, loadChefJustificatifs, roleKey]);
+  }, [activePage, hasLoadedChefJustificatifs, isLoadingChefJustificatifs, loadChefJustificatifs, roleKey]);
+
+  useEffect(() => {
+    if (roleKey === 'AGENT') {
+      loadAnalysesIA({ silent: true });
+    }
+  }, [loadAnalysesIA, roleKey]);
+
+  useEffect(() => {
+    if (roleKey === 'AGENT' && activePage === 'analyseIA' && !isLoadingAnalysesIA && !hasLoadedAnalysesIA) {
+      loadAnalysesIA();
+    }
+  }, [activePage, hasLoadedAnalysesIA, isLoadingAnalysesIA, loadAnalysesIA, roleKey]);
 
   const latestPresence = history[0];
   const activeItem = roleContent.items.find((item) => item.key === activePage) ?? roleContent.items[0];
 
-  const cards = useMemo(
-    () => [
-      {
-        title: 'Session',
-        value: user?.email ? 'Authentifiée' : 'Non définie',
-        description: 'Connexion via JWT et stockage local sécurisé.',
-      },
-      {
-        title: 'Rôle',
-        value: roleContent.title,
-        description: 'Redirection et accès alignés sur le profil utilisateur.',
-      },
-      {
-        title: 'Dernier pointage',
-        value: latestPresence ? formatPresenceStatus(latestPresence.statutPresence) : 'Aucun',
-        description: latestPresence
-          ? `${formatDateTime(latestPresence.heurePointage || latestPresence.datePresence)}`
-          : 'Aucun pointage enregistré pour l’instant.',
-      },
-    ],
-    [latestPresence, roleContent.title, user?.email]
-  );
 
   const goToHistory = () => {
     if (canPoint) {
       setActivePage('historique');
+    }
+  };
+
+  const handleAgentJustificatifSubmit = async (event) => {
+    event.preventDefault();
+    setAgentJustificatifsFeedback(null);
+    setIsSubmittingAgentJustificatif(true);
+
+    try {
+      const response = await submitJustificatif(agentJustificatifForm);
+      setAgentJustificatifsFeedback({
+        type: 'success',
+        message: response.message || 'Demande transmise avec succès.',
+      });
+      setAgentJustificatifForm({
+        typeJustificatif: '',
+        motif: '',
+        dateDebut: '',
+        dateFin: '',
+      });
+      await loadAgentJustificatifs({ silent: true });
+    } catch (error) {
+      console.error('submitJustificatif error:', error);
+      const errorMessage = error?.response?.data?.message
+        || error?.response?.data?.error
+        || error?.message
+        || 'Impossible de transmettre la demande.';
+      setAgentJustificatifsFeedback({
+        type: 'error',
+        message: errorMessage,
+      });
+    } finally {
+      setIsSubmittingAgentJustificatif(false);
     }
   };
 
@@ -398,6 +709,7 @@ function Dashboard({ user }) {
     try {
       const position = await getPosition();
       setCurrentPosition(position);
+
       const response = await marquerPresence({
         latitude: position.latitude,
         longitude: position.longitude,
@@ -417,6 +729,67 @@ function Dashboard({ user }) {
       });
     } finally {
       setIsSubmittingPointage(false);
+    }
+  };
+
+  const openFaceVerificationBeforePointage = () => {
+    setPointageFeedback(null);
+    setIsFaceVerificationOpen(true);
+  };
+
+  const handleMissionSubmit = async (event) => {
+    event.preventDefault();
+    setChefOperationsFeedback(null);
+    setIsSubmittingMission(true);
+
+    try {
+      const response = await createChefMission(missionForm);
+      setChefOperationsFeedback({
+        type: 'success',
+        message: response.message,
+      });
+      setMissionForm({
+        titre: '',
+        description: '',
+        agentAssigne: '',
+        echeance: '',
+      });
+      await loadChefOperations({ silent: true });
+    } catch (error) {
+      setChefOperationsFeedback({
+        type: 'error',
+        message: error?.message || 'Impossible de créer la mission.',
+      });
+    } finally {
+      setIsSubmittingMission(false);
+    }
+  };
+
+  const handleReunionSubmit = async (event) => {
+    event.preventDefault();
+    setChefOperationsFeedback(null);
+    setIsSubmittingReunion(true);
+
+    try {
+      const response = await createChefReunion(reunionForm);
+      setChefOperationsFeedback({
+        type: 'success',
+        message: response.message,
+      });
+      setReunionForm({
+        titre: '',
+        ordreDuJour: '',
+        lieu: '',
+        dateReunion: '',
+      });
+      await loadChefOperations({ silent: true });
+    } catch (error) {
+      setChefOperationsFeedback({
+        type: 'error',
+        message: error?.message || 'Impossible de créer la réunion.',
+      });
+    } finally {
+      setIsSubmittingReunion(false);
     }
   };
 
@@ -457,7 +830,10 @@ function Dashboard({ user }) {
             <strong>Localisation</strong>
             <span>
               {currentPosition
-                ? `${getGpsLabel()} · ${formatDistanceLabel(calculateDistanceKm(currentPosition, MINISTRY_ZONE))}`
+                ? `${getGpsLabel()} · ${formatDistanceLabel(calculateDistanceKm(currentPosition, MINISTRY_ZONE))}${Number.isFinite(currentPosition.accuracy)
+                  ? ` · précision ±${Math.round(currentPosition.accuracy)} m`
+                  : ''
+                }`
                 : 'La localisation sera capturée au moment du pointage.'}
             </span>
           </article>
@@ -473,30 +849,23 @@ function Dashboard({ user }) {
 
   const renderAgentOverview = () => (
     <>
-      {renderPresenceSummary()}
 
-      <section className="dashboard-hero-card agent-hero-card">
+      <section className="dashboard-hero-card-agent-hero-card">
         <div className="dashboard-hero-copy">
           <span className="dashboard-status-pill">{roleContent.subtitle}</span>
           <h1>Bienvenue, {user?.name || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
 
-        <div className="dashboard-highlight-list">
-          {roleContent.highlights.map((item) => (
-            <article key={item.label} className="dashboard-highlight-card">
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </article>
-          ))}
-        </div>
+        {renderPresenceSummary()}
       </section>
+
     </>
   );
 
   const renderChefOverview = () => (
     <>
-      {renderPresenceSummary()}
+
 
       <section className="dashboard-hero-card agent-hero-card">
         <div className="dashboard-hero-copy">
@@ -504,24 +873,8 @@ function Dashboard({ user }) {
           <h1>Bienvenue, {user?.name || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
-
-        <div className="dashboard-highlight-list">
-          {roleContent.highlights.map((item) => (
-            <article key={item.label} className="dashboard-highlight-card">
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </article>
-          ))}
-        </div>
-
-        <div className="dashboard-placeholder dashboard-placeholder-muted">
-          <strong>Rôle de supervision</strong>
-          <span>
-            Depuis les onglets dédiés, tu peux pointer ta présence, suivre les équipes, piloter les missions et les
-            réunions dans un même espace, consulter ton historique et valider les justificatifs.
-          </span>
-        </div>
       </section>
+      {renderPresenceSummary()}
     </>
   );
 
@@ -531,8 +884,8 @@ function Dashboard({ user }) {
         <div>
           <h2>Marquer présence</h2>
           <p className="panel-note">
-            Le navigateur capture la position GPS du poste et le backend vérifie ensuite la zone autorisée autour du
-            Ministère.
+            La caméra vérifie d’abord ton visage. Ensuite le navigateur capture la position GPS et le backend
+            valide la zone autorisée autour du Ministère.
           </p>
         </div>
         <span className="dashboard-status-pill">Pointage personnel</span>
@@ -544,52 +897,48 @@ function Dashboard({ user }) {
         <article className="dashboard-placeholder gps-map-card">
           <div className="gps-map-head">
             <div>
-              <strong>Carte GPS du Bénin</strong>
+              <strong>Carte GPS — Bénin</strong>
               <span>
-                {MINISTRY_ZONE.label} · périmètre autorisé {MINISTRY_ZONE.radiusKm.toFixed(0)} km
+                {MINISTRY_ZONE.label} · périmètre autorisé{' '}
+                {MINISTRY_ZONE.radiusKm.toFixed(0)} km
               </span>
             </div>
-            <span className={`presence-status-badge ${currentPosition ? 'is-present' : 'is-gps'}`}>
-              {currentPosition ? formatDistanceLabel(calculateDistanceKm(currentPosition, MINISTRY_ZONE)) : 'Position en attente'}
+            <span className={`presence-status-badge ${currentPosition ? 'is-present' : 'is-gps'
+              }`}>
+              {currentPosition ? 'Position capturée' : 'En attente'}
             </span>
           </div>
 
-          <div className="gps-map-surface" aria-label="Carte GPS du Bénin et du ministère">
-            <span className="gps-map-grid" />
-            <span className="gps-map-ring gps-map-ring-large" />
-            <span className="gps-map-ring gps-map-ring-medium" />
-            <span className="gps-map-ring gps-map-ring-small" />
-            <span className="gps-map-ministry">
-              <span className="gps-map-marker gps-map-marker-target" />
-              <strong>Ministère</strong>
-            </span>
-            {currentPosition ? (
-              <span className="gps-map-user" style={buildMapMarkerStyle(currentPosition)}>
-                <span className="gps-map-marker gps-map-marker-user" />
-                <strong>Vous</strong>
-              </span>
-            ) : (
-              <span className="gps-map-user gps-map-user-empty">
-                <span className="gps-map-marker gps-map-marker-user" />
-                <strong>GPS en attente</strong>
-              </span>
-            )}
-          </div>
+          <PresenceMap
+            userPosition={currentPosition}
+            rayonKm={MINISTRY_ZONE.radiusKm}
+          />
 
           <div className="gps-map-footer">
             <div>
               <span>Latitude</span>
-              <strong>{currentPosition ? formatCoordinate(currentPosition.latitude) : '—'}</strong>
+              <strong>
+                {currentPosition
+                  ? formatCoordinate(currentPosition.latitude)
+                  : '—'}
+              </strong>
             </div>
             <div>
               <span>Longitude</span>
-              <strong>{currentPosition ? formatCoordinate(currentPosition.longitude) : '—'}</strong>
+              <strong>
+                {currentPosition
+                  ? formatCoordinate(currentPosition.longitude)
+                  : '—'}
+              </strong>
             </div>
             <div>
               <span>Distance</span>
               <strong>
                 {currentPosition
-                  ? formatDistanceLabel(calculateDistanceKm(currentPosition, MINISTRY_ZONE))
+                  ? `${calculateDistanceKm(
+                    currentPosition,
+                    MINISTRY_ZONE
+                  ).toFixed(2)} km`
                   : 'En attente'}
               </strong>
             </div>
@@ -600,7 +949,7 @@ function Dashboard({ user }) {
           <strong>Statut attendu</strong>
           <span>
             Le backend calcule automatiquement <strong>PRESENT</strong> ou <strong>RETARD</strong> selon l’heure et
-            la zone GPS du ministère.
+            la vérification géographique du ministère.
           </span>
         </div>
       </div>
@@ -609,22 +958,22 @@ function Dashboard({ user }) {
         <button
           type="button"
           className="agent-pointage-orb"
-          onClick={handlePointage}
+          onClick={openFaceVerificationBeforePointage}
           disabled={isSubmittingPointage}
         >
           <span className="agent-pointage-orb-icon">
             <FingerprintIcon />
             <MapPinIcon />
           </span>
-          <strong>{isSubmittingPointage ? 'Pointage en cours...' : 'Marquer ma présence'}</strong>
-          <span>Via GPS · zone autorisée par le backend</span>
+          <strong>{isSubmittingPointage ? 'Pointage en cours...' : 'Vérifier puis pointer'}</strong>
+          <span>Visage + GPS · zone autorisée par le backend</span>
         </button>
 
         <div className="agent-pointage-statusline">
           <span className={`presence-status-badge ${getPresenceBadgeClass(latestPresence?.statutPresence)}`}>
             {latestPresence ? formatPresenceStatus(latestPresence.statutPresence) : 'Non pointé'}
           </span>
-          <p>Le bouton envoie latitude et longitude au backend. Le calcul de distance se fait côté Spring Boot.</p>
+          <p>Le pointage passe d’abord par la vérification faciale, puis envoie latitude et longitude au backend.</p>
         </div>
       </div>
 
@@ -744,14 +1093,148 @@ function Dashboard({ user }) {
       <div className="admin-section-head">
         <div>
           <h2>Demandes et justificatifs</h2>
-          <p className="panel-note">Cette zone accueillera plus tard les justificatifs, demandes et notifications.</p>
+          <p className="panel-note">
+            Dépose une demande, consulte l’historique des justificatifs et suis les retours du backend.
+          </p>
         </div>
-        <span className="dashboard-status-pill">À brancher</span>
+        <span className="dashboard-status-pill">Dossier agent</span>
       </div>
 
-      <div className="dashboard-placeholder dashboard-placeholder-muted">
-        <strong>Module en préparation</strong>
-        <span>Les demandes de justificatifs et les notifications seront branchées après l’historique.</span>
+      {agentJustificatifsFeedback && (
+        <div className={agentJustificatifsFeedback.type === 'error' ? 'form-error' : 'form-success'}>
+          {agentJustificatifsFeedback.message}
+        </div>
+      )}
+
+      <div className="agent-requests-grid">
+        <section className="dashboard-panel dashboard-panel-muted">
+          <div className="admin-section-head">
+            <div>
+              <h2>Nouvelle demande</h2>
+              <p className="panel-note">Prépare une permission ou un justificatif à envoyer au backend.</p>
+            </div>
+            <span className="dashboard-status-pill">Soumission</span>
+          </div>
+
+          <form className="dashboard-form" onSubmit={handleAgentJustificatifSubmit}>
+            <div className="form-grid">
+              <label className="dashboard-field">
+                <span>Type de justificatif</span>
+                <input
+                  type="text"
+                  value={agentJustificatifForm.typeJustificatif}
+                  onChange={(event) => setAgentJustificatifForm((current) => ({
+                    ...current,
+                    typeJustificatif: event.target.value,
+                  }))}
+                  placeholder="Permission, maladie, absence..."
+                  required
+                />
+              </label>
+
+              <label className="dashboard-field">
+                <span>Motif</span>
+                <input
+                  type="text"
+                  value={agentJustificatifForm.motif}
+                  onChange={(event) => setAgentJustificatifForm((current) => ({
+                    ...current,
+                    motif: event.target.value,
+                  }))}
+                  placeholder="Explique brièvement la demande"
+                  required
+                />
+              </label>
+
+              <label className="dashboard-field">
+                <span>Date de début</span>
+                <input
+                  type="date"
+                  value={agentJustificatifForm.dateDebut}
+                  onChange={(event) => setAgentJustificatifForm((current) => ({
+                    ...current,
+                    dateDebut: event.target.value,
+                  }))}
+                />
+              </label>
+
+              <label className="dashboard-field">
+                <span>Date de fin</span>
+                <input
+                  type="date"
+                  value={agentJustificatifForm.dateFin}
+                  onChange={(event) => setAgentJustificatifForm((current) => ({
+                    ...current,
+                    dateFin: event.target.value,
+                  }))}
+                />
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              className="primary-action-button"
+              disabled={isSubmittingAgentJustificatif}
+            >
+              {isSubmittingAgentJustificatif ? 'Envoi en cours...' : 'Envoyer la demande'}
+            </button>
+          </form>
+        </section>
+
+        <section className="dashboard-panel dashboard-panel-muted">
+          <div className="admin-section-head">
+            <div>
+              <h2>Mes justificatifs</h2>
+              <p className="panel-note">Historique des demandes déjà déposées et leur statut.</p>
+            </div>
+            <span className="dashboard-status-pill">
+              {agentJustificatifs.length} entrée(s)
+            </span>
+          </div>
+
+          {isLoadingAgentJustificatifs ? (
+            <div className="dashboard-placeholder">
+              <strong>Chargement des justificatifs</strong>
+              <span>Connexion aux demandes de l’agent en cours...</span>
+            </div>
+          ) : agentJustificatifs.length === 0 ? (
+            <div className="dashboard-placeholder dashboard-placeholder-muted">
+              <strong>Aucun justificatif pour l’instant</strong>
+              <span>Les demandes transmises au backend apparaîtront ici dès qu’elles seront disponibles.</span>
+            </div>
+          ) : (
+            <div className="agent-justificatifs-list">
+              {agentJustificatifs.map((item, index) => {
+                const label = item.typeJustificatif || item.type || item.categorie || 'Justificatif';
+                const status = String(item.statut || item.status || 'EN_ATTENTE').toUpperCase();
+                const dateValue = item.dateJustificatif || item.dateDemande || item.createdAt;
+                const badgeClass =
+                  status === 'ACCEPTE'
+                    ? 'is-present'
+                    : status === 'REFUSE'
+                      ? 'is-late'
+                      : 'is-gps';
+
+                return (
+                  <article key={item.id ?? `${label}-${index}`} className="dashboard-placeholder dashboard-placeholder-muted">
+                    <strong>{label}</strong>
+                    <span>{item.motif || item.description || 'Demande transmise au service.'}</span>
+                    <div className="table-subnote">{formatDateTime(dateValue)}</div>
+                    <div className="admin-row-actions">
+                      <span className={`presence-status-badge ${badgeClass}`}>
+                        {status === 'ACCEPTE'
+                          ? 'Accepté'
+                          : status === 'REFUSE'
+                            ? 'Refusé'
+                            : 'En attente'}
+                      </span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </section>
   );
@@ -762,7 +1245,7 @@ function Dashboard({ user }) {
         <div>
           <h2>Présences des agents</h2>
           <p className="panel-note">
-            Suivi des pointages de l’équipe. Cette vue consolide la lecture RH du service et les décisions du chef.
+            Suivi des pointages de l’équipe. Cette vue consolide la lecture du service et les décisions du chef.
           </p>
         </div>
         <span className="dashboard-status-pill">Suivi d’équipe</span>
@@ -782,7 +1265,7 @@ function Dashboard({ user }) {
         <article className="dashboard-stat-card chef-metric-card">
           <span>Présences du jour</span>
           <strong>{chefPresences.length ? 'Chargées' : 'À charger'}</strong>
-          <p>Pointages, retards et absences de l’équipe, regroupés pour une lecture RH rapide.</p>
+          <p>Pointages, retards et absences de l’équipe, regroupés pour une lecture rapide du service.</p>
         </article>
 
         <article className="dashboard-stat-card chef-metric-card">
@@ -869,21 +1352,202 @@ function Dashboard({ user }) {
         <span className="dashboard-status-pill">Organisation</span>
       </div>
 
+      {chefOperationsFeedback && chefOperationsFeedback.type === 'error' && (
+        <div className="form-error">{chefOperationsFeedback.message}</div>
+      )}
+
+      {chefOperationsFeedback && chefOperationsFeedback.type === 'success' && (
+        <div className="form-success">{chefOperationsFeedback.message}</div>
+      )}
+
       <div className="chef-operations-grid">
-        <article className="dashboard-placeholder">
-          <strong>Missions du service</strong>
-          <span>Attributions, agents concernés, échéances et état d’exécution dans un seul volet.</span>
+        <article className="dashboard-placeholder dashboard-placeholder-muted chef-operation-column">
+          <div className="chef-operation-head">
+            <div>
+              <strong>Missions du service</strong>
+              <div className="table-subnote">Attributions, agents concernés, échéances et état d’exécution.</div>
+            </div>
+            <span className="presence-status-badge is-present">{chefMissions.length} mission(s)</span>
+          </div>
+
+          {isLoadingChefOperations ? (
+            <div className="dashboard-placeholder">
+              <strong>Chargement des missions</strong>
+              <span>Récupération des données métier du chef en cours...</span>
+            </div>
+          ) : chefMissions.length === 0 ? (
+            <div className="dashboard-placeholder">
+              <strong>Aucune mission</strong>
+              <span>Le backend doit renvoyer les missions pour activer la vue de suivi.</span>
+            </div>
+          ) : (
+            <div className="chef-list">
+              {chefMissions.map((mission, index) => {
+                const agent = mission.agent || mission.utilisateur || mission.user;
+                const agentName =
+                  [agent?.nom, agent?.prenom].filter(Boolean).join(' ').trim() ||
+                  agent?.email ||
+                  mission.agentAssigne ||
+                  `Agent ${index + 1}`;
+                const status = mission.statut || mission.status || 'EN_COURS';
+
+                return (
+                  <article key={mission.id ?? `mission-${index}`} className="chef-list-item">
+                    <div>
+                      <strong>{mission.titre || mission.libelle || 'Mission'}</strong>
+                      <div className="table-subnote">{agentName}</div>
+                    </div>
+                    <div className="chef-list-meta">
+                      <span className={`presence-status-badge ${String(status).toUpperCase() === 'TERMINEE' ? 'is-present' : 'is-gps'}`}>
+                        {String(status).replace(/_/g, ' ')}
+                      </span>
+                      <span>{formatDateTime(mission.echeance || mission.dateEcheance || mission.createdAt)}</span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+
+          <form className="chef-form" onSubmit={handleMissionSubmit}>
+            <div className="chef-form-grid-two">
+              <label className="field-input-wrap field-input-wrap-plain">
+                <input
+                  type="text"
+                  value={missionForm.titre}
+                  onChange={(event) => setMissionForm((current) => ({ ...current, titre: event.target.value }))}
+                  placeholder="Titre de la mission"
+                />
+              </label>
+
+              <label className="field-input-wrap field-input-wrap-plain">
+                <input
+                  type="text"
+                  value={missionForm.agentAssigne}
+                  onChange={(event) => setMissionForm((current) => ({ ...current, agentAssigne: event.target.value }))}
+                  placeholder="Agent assigné"
+                />
+              </label>
+            </div>
+
+            <label className="field-input-wrap field-input-wrap-plain">
+              <input
+                type="datetime-local"
+                value={missionForm.echeance}
+                onChange={(event) => setMissionForm((current) => ({ ...current, echeance: event.target.value }))}
+              />
+            </label>
+
+            <label className="chef-textarea-wrap">
+              <textarea
+                value={missionForm.description}
+                onChange={(event) => setMissionForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Description, objectifs et consignes"
+                rows="4"
+              />
+            </label>
+
+            <div className="admin-form-actions">
+              <button type="submit" className="primary-button" disabled={isSubmittingMission}>
+                {isSubmittingMission ? 'Création...' : 'Créer la mission'}
+              </button>
+            </div>
+          </form>
         </article>
 
-        <article className="dashboard-placeholder dashboard-placeholder-muted">
-          <strong>Réunions de service</strong>
-          <span>Ordre du jour, convocations, présence et suivi des décisions dans la même vue.</span>
+        <article className="dashboard-placeholder dashboard-placeholder-muted chef-operation-column">
+          <div className="chef-operation-head">
+            <div>
+              <strong>Réunions de service</strong>
+              <div className="table-subnote">Ordre du jour, convocations, présence et suivi des décisions.</div>
+            </div>
+            <span className="presence-status-badge is-gps">{chefReunions.length} réunion(s)</span>
+          </div>
+
+          {isLoadingChefOperations ? (
+            <div className="dashboard-placeholder">
+              <strong>Chargement des réunions</strong>
+              <span>Synchronisation des réunions du service en cours...</span>
+            </div>
+          ) : chefReunions.length === 0 ? (
+            <div className="dashboard-placeholder">
+              <strong>Aucune réunion</strong>
+              <span>Le backend doit renvoyer les réunions pour activer la vue de planification.</span>
+            </div>
+          ) : (
+            <div className="chef-list">
+              {chefReunions.map((reunion, index) => (
+                <article key={reunion.id ?? `reunion-${index}`} className="chef-list-item">
+                  <div>
+                    <strong>{reunion.titre || reunion.libelle || 'Réunion'}</strong>
+                    <div className="table-subnote">
+                      {reunion.lieu || reunion.localisation || 'Lieu à préciser'}
+                    </div>
+                  </div>
+                  <div className="chef-list-meta">
+                    <span className="presence-status-badge is-present">
+                      {String(reunion.statut || reunion.status || 'PLANIFIEE').replace(/_/g, ' ')}
+                    </span>
+                    <span>{formatDateTime(reunion.dateReunion || reunion.date || reunion.createdAt)}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <form className="chef-form" onSubmit={handleReunionSubmit}>
+            <label className="field-input-wrap field-input-wrap-plain">
+              <input
+                type="text"
+                value={reunionForm.titre}
+                onChange={(event) => setReunionForm((current) => ({ ...current, titre: event.target.value }))}
+                placeholder="Titre de la réunion"
+              />
+            </label>
+
+            <div className="chef-form-grid-two">
+              <label className="field-input-wrap field-input-wrap-plain">
+                <input
+                  type="text"
+                  value={reunionForm.lieu}
+                  onChange={(event) => setReunionForm((current) => ({ ...current, lieu: event.target.value }))}
+                  placeholder="Lieu"
+                />
+              </label>
+
+              <label className="field-input-wrap field-input-wrap-plain">
+                <input
+                  type="datetime-local"
+                  value={reunionForm.dateReunion}
+                  onChange={(event) => setReunionForm((current) => ({ ...current, dateReunion: event.target.value }))}
+                />
+              </label>
+            </div>
+
+            <label className="chef-textarea-wrap">
+              <textarea
+                value={reunionForm.ordreDuJour}
+                onChange={(event) => setReunionForm((current) => ({ ...current, ordreDuJour: event.target.value }))}
+                placeholder="Ordre du jour, participants et points à traiter"
+                rows="4"
+              />
+            </label>
+
+            <div className="admin-form-actions">
+              <button type="submit" className="primary-button" disabled={isSubmittingReunion}>
+                {isSubmittingReunion ? 'Création...' : 'Créer la réunion'}
+              </button>
+            </div>
+          </form>
         </article>
       </div>
 
       <div className="dashboard-placeholder dashboard-placeholder-muted">
-        <strong>Coordination RH</strong>
-        <span>La fusion de ces deux modules allège l’interface et garde l’expérience claire pour le chef.</span>
+        <strong>Coordination du service</strong>
+        <span>
+          La fusion de ces deux modules allège l’interface et garde l’expérience claire pour le chef, tout en
+          préparant le branchement backend complet.
+        </span>
       </div>
     </section>
   );
@@ -955,6 +1619,200 @@ function Dashboard({ user }) {
       includeAnalytics: true,
     });
 
+  const renderAnalyseIAPanel = () => (
+    <section className="dashboard-panel dashboard-panel-wide">
+      <div className="admin-section-head">
+        <div>
+          <h2>Analyse intelligente</h2>
+          <p className="panel-note">Analyse automatique de vos présences basée sur l'IA.</p>
+        </div>
+        <span className="dashboard-status-pill">Synthèse IA</span>
+      </div>
+
+      {analysesIAFeedback && analysesIAFeedback.type === 'error' && (
+        <div className="form-error">{analysesIAFeedback.message}</div>
+      )}
+      {analysesIAFeedback && analysesIAFeedback.type === 'success' && (
+        <div className="form-success">{analysesIAFeedback.message}</div>
+      )}
+
+      <button
+        type="button"
+        className="primary-button"
+        onClick={handleGenererAnalyseIA}
+        disabled={isGeneratingAnalyseIA || isLoadingAnalysesIA}
+        title={hasAnalysisTodayIA() ? 'Une analyse a déjà été générée aujourd\'hui' : ''}
+      >
+        {isGeneratingAnalyseIA
+          ? 'Génération en cours...'
+          : 'Générer analyse'}
+      </button>
+
+      {isLoadingAnalysesIA ? (
+        <div className="dashboard-placeholder" style={{ marginTop: '20px' }}>
+          <strong>Chargement des analyses</strong>
+          <span>Connexion au backend en cours...</span>
+        </div>
+      ) : analysesIA.length === 0 ? (
+        <div className="dashboard-placeholder dashboard-placeholder-muted" style={{ marginTop: '20px' }}>
+          <strong>Aucune analyse disponible</strong>
+          <span>Cliquez sur "Générer analyse" pour créer votre première analyse IA.</span>
+        </div>
+      ) : (
+        <div className="analyses-list" style={{ marginTop: '20px' }}>
+          {analysesIA.map((analyse) => (
+            <article key={analyse.id} className="analyse-card">
+              <div className="analyse-header">
+                <strong>Score ponctualité : {analyse.scorePonctualite?.toFixed(2)}%</strong>
+                <span className="analyse-date">{formatDateTime(analyse.dateAnalyse)}</span>
+              </div>
+
+              <div className="analyse-grid">
+                <div className="analyse-item">
+                  <label>Taux présence</label>
+                  <strong>{analyse.tauxPresence?.toFixed(2)}%</strong>
+                </div>
+
+                <div className="analyse-item">
+                  <label>Régularité</label>
+                  <strong>{analyse.niveauRegularite}</strong>
+                </div>
+              </div>
+
+              <div className="analyse-recommandation">
+                <label>Recommandation</label>
+                <p>{analyse.recommandation}</p>
+              </div>
+
+
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+
+  const renderParametresPanel = () => (
+    
+    <section className="dashboard-panel dashboard-panel-wide">
+      <div className="admin-section-head">
+        <div>
+          <h2>Paramètres du profil</h2>
+          <p className="panel-note">
+            Tes informations sont mises à jour après modification.
+          </p>
+        </div>
+        <span className="dashboard-status-pill">Mon compte</span>
+      </div>
+
+      <div className="parametres-grid">
+
+        {/* INFOS ACTUELLES */}
+        <div className="dashboard-placeholder">
+          <div className="dashboard-placeholder">
+            <strong>Photo de profil</strong>
+            <PhotoUploadInput />
+          </div>
+          <strong>Informations actuelles</strong>
+          <div className="profil-info-grid">
+            <div className="profil-info-item">
+              <span>Nom complet: </span>
+              <strong>{user?.name || '—'}</strong>
+            </div>
+            <div className="profil-info-item">
+              <span>Email: </span>
+              <strong>{user?.email || '—'}</strong>
+            </div>
+            <div className="profil-info-item">
+              <span>Rôle: </span>
+              <strong>{roleContent.title}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* FORMULAIRE */}
+        <div className="dashboard-placeholder">
+          <strong>Modifier le profil</strong>
+
+          {profilFeedback && (
+            <div className={
+              profilFeedback.type === 'error'
+                ? 'form-error'
+                : 'form-success'
+            }>
+              {profilFeedback.message}
+            </div>
+          )}
+
+          <form
+            className="parametres-form"
+            onSubmit={handleProfilSubmit}
+          >
+            <div className="parametres-form-grid">
+              <div className="dashboard-field">
+                <span>Nouveau nom</span>
+                <input
+                  type="text"
+                  value={profilForm.nom}
+                  onChange={(e) => setProfilForm(
+                    (c) => ({ ...c, nom: e.target.value })
+                  )}
+                  placeholder={'Entrez votre Nom'}
+                />
+              </div>
+
+              <div className="dashboard-field">
+                <span>Nouveau prénom</span>
+                <input
+                  type="text"
+                  value={profilForm.prenom}
+                  onChange={(e) => setProfilForm(
+                    (c) => ({ ...c, prenom: e.target.value })
+                  )}
+                  placeholder="Entrez votre Prénom"
+                />
+              </div>
+            </div>
+
+            <div className="dashboard-field">
+              <span>Nouvel email</span>
+              <input
+                type="email"
+                value={profilForm.email}
+                onChange={(e) => setProfilForm(
+                  (c) => ({ ...c, email: e.target.value })
+                )}
+                placeholder={'L\'email ici'}
+              />
+            </div>
+
+            <div className="dashboard-field">
+              <span>Nouveau mot de passe</span>
+              <input
+                type="password"
+                value={profilForm.motDePasse}
+                onChange={(e) => setProfilForm(
+                  (c) => ({ ...c, motDePasse: e.target.value })
+                )}
+                placeholder="Laisser vide pour ne pas changer"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="primary-action-button"
+              disabled={isUpdatingProfil}
+            >
+              {isUpdatingProfil
+                ? 'Mise à jour...'
+                : 'Enregistrer les modifications'}
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </section>
+  );
   const renderAgentBody = () => {
     if (activePage === 'pointage') {
       return renderPointagePanel();
@@ -964,8 +1822,15 @@ function Dashboard({ user }) {
       return renderHistoryPanel();
     }
 
+    if (activePage === 'analyseIA') {
+      return renderAnalyseIAPanel();
+    }
+
     if (activePage === 'demandes') {
       return renderRequestsPanel();
+    }
+    if (activePage === 'parametres') {
+      return renderParametresPanel();
     }
 
     return renderAgentOverview();
@@ -990,6 +1855,9 @@ function Dashboard({ user }) {
 
     if (activePage === 'historique') {
       return renderChefHistoryPanel();
+    }
+    if (activePage === 'parametres') {
+      return renderParametresPanel();
     }
 
     return renderChefOverview();
@@ -1029,11 +1897,12 @@ function Dashboard({ user }) {
         </section>
       );
     }
+    
+    console.log(user);
 
     return (
       <section className="dashboard-hero-card">
         <div className="dashboard-hero-copy">
-          <span className="dashboard-status-pill">{roleContent.subtitle}</span>
           <h1>Bienvenue, {user?.name || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
@@ -1052,31 +1921,107 @@ function Dashboard({ user }) {
 
   return (
     <div className="dashboard-page dashboard-page-clean">
-      <Sidebar role={roleKey} activePage={activePage} onChangePage={setActivePage} items={roleContent.items} />
+      <div
+        className={`dashboard-sidebar ${sidebarOpen ? 'open' : ''}`}
+      >
+        <button
+          className="dashboard-close-btn"
+          onClick={() => setSidebarOpen(false)}
+        >
+          ✕
+        </button>
+
+        <Sidebar role={roleKey} activePage={activePage}
+          onChangePage={setActivePage} items={roleContent.items} user={user} onLogout={logout} />
+      </div>
+
+      {sidebarOpen && (
+        <div
+          className="dashboard-overlay"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
 
       <main className="dashboard-main dashboard-main-clean">
         <div className="dashboard-head">
-          <div>
-            <p className="dashboard-kicker">Espace de travail</p>
-            <h1 className="dashboard-title">{roleContent.title}</h1>
-          </div>
-          <div className="dashboard-user-chip">
-            <span>{user?.email || 'Aucun email'}</span>
+          <div />
+          <div className="dashboard-head-actions">
+            <button
+              type="button"
+              className="notification-bell"
+              onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+            >
+              🔔
+              {notificationsCount > 0 && (
+                <span className="notification-count">
+                  {notificationsCount}
+                </span>
+              )}
+            </button>
+            <div className="dashboard-user-profile">
+
+              {user?.photoProfil ? (
+                <img
+                  src={user.photoProfil}
+                  alt="profil"
+                  className="dashboard-user-avatar"
+                />
+              ) : (
+                <div className="dashboard-avatar-placeholder">
+                  {(user?.name || 'U')
+                    .split(' ')
+                    .map(part => part[0])
+                    .join('')
+                    .toUpperCase()}
+                </div>
+              )}
+
+            </div>
           </div>
         </div>
 
-        <div className="dashboard-cards">
-          {cards.map((card) => (
-            <article key={card.title} className="dashboard-stat-card">
-              <span>{card.title}</span>
-              <strong>{card.value}</strong>
-              <p>{card.description}</p>
-            </article>
-          ))}
-        </div>
+        {isNotificationsOpen && (
+          <div className="notifications-dropdown">
+            <Notifications onCountChange={handleNotificationsCountChange} />
+          </div>
+        )}
 
+
+        {isNotificationsOpen && (
+          <div className="notifications-dropdown">
+            <Notifications
+              onCountChange={
+                handleNotificationsCountChange
+              }
+            />
+          </div>
+        )}
         {renderBody()}
+
+        <button
+          className="dashboard-menu-btn"
+          onClick={() => setSidebarOpen(true)}
+        >
+          ☰
+        </button>
       </main>
+
+      <FaceVerificationModal
+        open={isFaceVerificationOpen}
+        userName={user?.name || 'agent'}
+        onClose={() => {
+          setIsFaceVerificationOpen(false);
+          setPointageFeedback({
+            type: 'error',
+            message: 'La vérification faciale est obligatoire avant le pointage.',
+          });
+        }}
+        onSuccess={async () => {
+          setIsFaceVerificationOpen(false);
+          await handlePointage();
+        }}
+      />
     </div>
   );
 }
