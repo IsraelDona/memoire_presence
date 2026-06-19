@@ -91,40 +91,7 @@ public class PdfService {
             );
 
             document.close();
-            String nomFichier =
-                    "rapport_dgb_"
-                            + LocalDateTime.now()
-                            .format(
-                                    DateTimeFormatter.ofPattern(
-                                            "yyyy_MM_dd_HH_mm_ss"))
-                            + ".pdf";
-
-            Path chemin =
-                    Paths.get(
-                            "src/main/resources/rapports/",
-                            nomFichier);
-
-            Files.write(
-                    chemin,
-                    out.toByteArray());
-
-            RapportPdf rapport =
-                    new RapportPdf();
-
-            rapport.setNomFichier(
-                    nomFichier);
-
-            rapport.setDateGeneration(
-                    LocalDateTime.now());
-
-            rapport.setChemin(
-                    chemin.toString());
-
-            rapport.setTaille(
-                    Files.size(chemin));
-
-            rapportPdfRepository.save(
-                    rapport);
+            
 
         } catch (Exception e) {
 

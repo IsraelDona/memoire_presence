@@ -175,8 +175,10 @@ public class AuthService {
                 token,
                 utilisateur.getRole().getNomRole().name(),
                 utilisateur.getNom(),
+                utilisateur.getPrenom(),
                 utilisateur.getEmail(),
-                utilisateur.isVisageEnregistre()
+                utilisateur.isVisageEnregistre(),
+                utilisateur.getPhotoProfil()
         );
     }
 

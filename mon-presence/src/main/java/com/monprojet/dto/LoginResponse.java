@@ -5,8 +5,10 @@ public class LoginResponse {
     private String token;
     private String role;
     private String nom;
+    private String prenom;
     private String email;
     private boolean visageEnregistre;
+    private String photoProfil;
 
     public LoginResponse() {
     }
@@ -15,14 +17,18 @@ public class LoginResponse {
             String token,
             String role,
             String nom,
+            String prenom,
             String email,
-            boolean visageEnregistre
+            boolean visageEnregistre,
+            String photoProfil
     ) {
         this.token = token;
         this.role = role;
         this.nom = nom;
+        this.prenom = prenom;
         this.email = email;
         this.visageEnregistre = visageEnregistre;
+        this.photoProfil = photoProfil;
     }
 
     public String getToken() {
@@ -49,6 +55,14 @@ public class LoginResponse {
         this.nom = nom;
     }
 
+    public String getPrenom() {
+        return prenom;
+    }
+
+    public void setPrenom(String prenom) {
+        this.prenom = prenom;
+    }
+
     public String getEmail() {
         return email;
     }
@@ -63,5 +77,13 @@ public class LoginResponse {
 
     public void setVisageEnregistre(boolean visageEnregistre) {
         this.visageEnregistre = visageEnregistre;
+    }
+
+    public String getPhotoProfil() {
+        return photoProfil;
+    }
+
+    public void setPhotoProfil(String photoProfil) {
+        this.photoProfil = photoProfil;
     }
 }
