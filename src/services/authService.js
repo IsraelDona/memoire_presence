@@ -69,11 +69,11 @@ function buildSession(payload = {}) {
     token: payload.token ?? '',
     role,
     roleKey: getRoleKey(role),
-    name: payload.nom ?? payload.name ?? '',
+    nom: payload.nom ?? '',
+    prenom: payload.prenom ?? '',
     email: payload.email ?? '',
     visageEnregistre,
     photoVisage: payload.photoVisage ?? payload.photo_visage ?? '',
-    
     photoProfil: payload.photoProfil ?? payload.photo_profil ?? '',
   };
 }

@@ -10,6 +10,14 @@ import Notifications from '../../components/notifications/Notifications';
 import { updateMonProfil } from '../../services/profilService';
 import { getZoneGps, updateZoneGps } from '../../services/gpsService';
 
+import useNotificationsPolling from '../../hooks/useNotificationsPolling';
+import NotificationToast from '../../components/notifications/NotificationToast';
+
+import {
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+} from 'recharts';
+
 
 const INITIAL_CHEF_FORM = {
   nom: '',
@@ -62,7 +70,12 @@ function AdminDashboard() {
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notificationsCount, setNotificationsCount] = useState(0);
+  const {
+    count: notificationsCount,
+    toast: notificationToast,
+    dismissToast,
+    setCountManually,
+  } = useNotificationsPolling();
 
   const [profilForm, setProfilForm] = useState({
     nom: '',
@@ -73,9 +86,32 @@ function AdminDashboard() {
   const [profilFeedback, setProfilFeedback] = useState(null);
   const [isUpdatingProfil, setIsUpdatingProfil] = useState(false);
 
-  const [gpsConfig, setGpsConfig] = useState({ latitude: '', longitude: '', rayonKm: '' });
-  const [gpsFeedback, setGpsFeedback] = useState(null);
-  const [isUpdatingGps, setIsUpdatingGps] = useState(false);
+const [gpsConfig, setGpsConfig] = useState({
+  latitude: '',
+  longitude: '',
+  rayonKm: '',
+  nomLieu: '',
+  nombrePointagesParJour: 1,
+  modeTestSansZone: false,
+});
+const [gpsFeedback, setGpsFeedback] = useState(null);
+const [isUpdatingGps, setIsUpdatingGps] = useState(false);
+
+const [localToast, setLocalToast] = useState(null);
+
+const showLocalToast = ({ type, message }) => {
+  setLocalToast({ type, message, id: Date.now() });
+  setTimeout(() => setLocalToast(null), 5000);
+};
+
+const notifierAction = (setFeedbackFn, type, message) => {
+  setFeedbackFn({ type, message });
+
+  setTimeout(() => {
+    setFeedbackFn(null);
+    showLocalToast({ type, message });
+  }, 2500);
+};
 
   const loadDemandes = useCallback(async ({ showError = false, silent = false } = {}) => {
     if (!silent) {
@@ -127,6 +163,7 @@ function AdminDashboard() {
       loadDemandes({ showError: true });
     }
   }, [activePage, loadDemandes]);
+
   useEffect(() => {
     if (activePage === 'parametres') {
       getZoneGps()
@@ -136,6 +173,9 @@ function AdminDashboard() {
               latitude: data.latitude.toString(),
               longitude: data.longitude.toString(),
               rayonKm: data.rayonKm.toString(),
+              nomLieu: data.nomLieu || '',
+              nombrePointagesParJour: data.nombrePointagesParJour || 1,
+              modeTestSansZone: Boolean(data.modeTestSansZone),
             });
           }
         })
@@ -147,92 +187,96 @@ function AdminDashboard() {
 
 
 
-  const handleProfilSubmit = async (event) => {
-    event.preventDefault();
-    setProfilFeedback(null);
-    setIsUpdatingProfil(true);
+const handleProfilSubmit = async (event) => {
+  event.preventDefault();
+  setProfilFeedback(null);
+  setIsUpdatingProfil(true);
 
-    try {
-      const result = await updateMonProfil({
-        nom: profilForm.nom.trim() || undefined,
-        prenom: profilForm.prenom.trim() || undefined,
-        email: profilForm.email.trim() || undefined,
-        motDePasse: profilForm.motDePasse || undefined,
-      });
+  try {
+    const result = await updateMonProfil({
+      nom: profilForm.nom.trim() || undefined,
+      prenom: profilForm.prenom.trim() || undefined,
+      email: profilForm.email.trim() || undefined,
+      motDePasse: profilForm.motDePasse || undefined,
+    });
 
-      // 1. Mise à jour instantanée du contexte utilisateur (puce d'en-tête et infos actuelles)
-      updateUser({
-        nom: profilForm.nom.trim() || user.nom,
-        prenom: profilForm.prenom.trim() || user.prenom,
-        email: profilForm.email.trim() || user.email
-      });
+    updateUser({
+      nom: profilForm.nom.trim() || user.nom,
+      prenom: profilForm.prenom.trim() || user.prenom,
+      email: profilForm.email.trim() || user.email
+    });
 
-      // 2. Affichage du feedback de succès
-      setProfilFeedback({
-        type: 'success',
-        message: typeof result === 'string' ? result : 'Profil mis à jour avec succès.',
-      });
+    setProfilForm({ nom: '', prenom: '', email: '', motDePasse: '' });
 
-      // 3. Réinitialisation sécurisée des champs du formulaire
-      setProfilForm({ nom: '', prenom: '', email: '', motDePasse: '' });
+    notifierAction(
+      setProfilFeedback,
+      'success',
+      typeof result === 'string' ? result : 'Profil mis à jour avec succès.'
+    );
 
-    } catch (error) {
-      setProfilFeedback({
-        type: 'error',
-        message: error?.message || 'Impossible de mettre à jour le profil.',
-      });
-    } finally {
-      setIsUpdatingProfil(false);
-    }
-  };
-  const handleGpsSubmit = async (event) => {
-    event.preventDefault();
-    setGpsFeedback(null);
-    setIsUpdatingGps(true);
+  } catch (error) {
+    notifierAction(
+      setProfilFeedback,
+      'error',
+      error?.message || 'Impossible de mettre à jour le profil.'
+    );
+  } finally {
+    setIsUpdatingProfil(false);
+  }
+};
+const handleGpsSubmit = async (event) => {
+  event.preventDefault();
+  setGpsFeedback(null);
+  setIsUpdatingGps(true);
 
-    try {
-      const payload = {
-        latitude: parseFloat(gpsConfig.latitude),
-        longitude: parseFloat(gpsConfig.longitude),
-        rayonKm: parseFloat(gpsConfig.rayonKm),
-      };
+  try {
+    const payload = {
+      latitude: parseFloat(gpsConfig.latitude),
+      longitude: parseFloat(gpsConfig.longitude),
+      rayonKm: parseFloat(gpsConfig.rayonKm),
+      nombrePointagesParJour: Number(gpsConfig.nombrePointagesParJour),
+      modeTestSansZone: gpsConfig.modeTestSansZone,
+    };
 
-      const response = await updateZoneGps(payload);
+    const response = await updateZoneGps(payload);
 
-      setGpsFeedback({
-        type: 'success',
-        message: typeof response === 'string' ? response : 'Zone de pointage mise à jour avec succès.',
-      });
-    } catch (error) {
-      setGpsFeedback({
-        type: 'error',
-        message: error?.message || 'Impossible de mettre à jour la zone GPS.',
-      });
-    } finally {
-      setIsUpdatingGps(false);
-    }
-  };
+    setGpsConfig((current) => ({
+      ...current,
+      nomLieu: response?.nomLieu || current.nomLieu,
+    }));
 
-  const handleDecision = async (utilisateurId, accepter) => {
-    setBusyAction({ utilisateurId, accepter });
-    setRequestsFeedback(null);
+    notifierAction(setGpsFeedback, 'success', 'Paramètres de pointage mis à jour avec succès.');
+  } catch (error) {
+    notifierAction(
+      setGpsFeedback,
+      'error',
+      error?.message || 'Impossible de mettre à jour les paramètres.'
+    );
+  } finally {
+    setIsUpdatingGps(false);
+  }
+};
 
-    try {
-      const result = await traiterDemandeCompte({ utilisateurId, accepter });
-      setRequestsFeedback({
-        type: 'success',
-        message: result.message,
-      });
-      await loadDemandes({ silent: true });
-    } catch (error) {
-      setRequestsFeedback({
-        type: 'error',
-        message: error?.message || 'Impossible de traiter la demande.',
-      });
-    } finally {
-      setBusyAction(null);
-    }
-  };
+const handleDecision = async (utilisateurId, accepter) => {
+  setBusyAction({ utilisateurId, accepter });
+  setRequestsFeedback(null);
+
+  try {
+    const result = await traiterDemandeCompte({ utilisateurId, accepter });
+
+    notifierAction(setRequestsFeedback, 'success', result.message);
+
+    await loadDemandes({ silent: true });
+  } catch (error) {
+    notifierAction(
+      setRequestsFeedback,
+      'error',
+      error?.message || 'Impossible de traiter la demande.'
+    );
+  } finally {
+    setBusyAction(null);
+  }
+};
 
   const handleChefChange = (event) => {
     const { name, value } = event.target;
@@ -246,43 +290,42 @@ function AdminDashboard() {
     setChefForm(INITIAL_CHEF_FORM);
   };
 
-  const handleChefSubmit = async (event) => {
-    event.preventDefault();
-    setChefFeedback(null);
+const handleChefSubmit = async (event) => {
+  event.preventDefault();
+  setChefFeedback(null);
 
-    if (chefForm.motDePasse !== chefForm.confirmMotDePasse) {
-      setChefFeedback({
-        type: 'error',
-        message: 'Les mots de passe du chef service ne correspondent pas.',
-      });
-      return;
-    }
+  if (chefForm.motDePasse !== chefForm.confirmMotDePasse) {
+    notifierAction(
+      setChefFeedback,
+      'error',
+      'Les mots de passe du chef service ne correspondent pas.'
+    );
+    return;
+  }
 
-    setIsCreatingChef(true);
+  setIsCreatingChef(true);
 
-    try {
-      const result = await creerChefService({
-        nom: chefForm.nom.trim(),
-        prenom: chefForm.prenom.trim(),
-        email: chefForm.email.trim(),
-        telephone: chefForm.telephone.trim(),
-        motDePasse: chefForm.motDePasse,
-      });
+  try {
+    const result = await creerChefService({
+      nom: chefForm.nom.trim(),
+      prenom: chefForm.prenom.trim(),
+      email: chefForm.email.trim(),
+      telephone: chefForm.telephone.trim(),
+      motDePasse: chefForm.motDePasse,
+    });
 
-      setChefFeedback({
-        type: 'success',
-        message: result.message,
-      });
-      resetChefForm();
-    } catch (error) {
-      setChefFeedback({
-        type: 'error',
-        message: error?.message || 'Impossible de créer le chef service.',
-      });
-    } finally {
-      setIsCreatingChef(false);
-    }
-  };
+    notifierAction(setChefFeedback, 'success', result.message);
+    resetChefForm();
+  } catch (error) {
+    notifierAction(
+      setChefFeedback,
+      'error',
+      error?.message || 'Impossible de créer le chef service.'
+    );
+  } finally {
+    setIsCreatingChef(false);
+  }
+};
 
   const renderDemandesTable = () => {
     if (isLoadingDemandes) {
@@ -378,40 +421,54 @@ function AdminDashboard() {
             <span>Connexion au backend en cours...</span>
           </div>
         ) : stats ? (
-          <div className="stats-grid">
-            <div className="stats-item">
-              <label>Agents</label>
-              <strong>{stats.nombreAgents}</strong>
+          <>
+            <div className="stats-grid">
+              <div className="stats-item">
+                <label>Agents</label>
+                <strong>{stats.nombreAgents}</strong>
+              </div>
+              <div className="stats-item">
+                <label>Présences</label>
+                <strong>{stats.nombrePresences}</strong>
+              </div>
+              <div className="stats-item">
+                <label>Retards</label>
+                <strong>{stats.nombreRetards}</strong>
+              </div>
+              <div className="stats-item">
+                <label>Analyses IA</label>
+                <strong>{stats.nombreAnalysesIA}</strong>
+              </div>
+              <div className="stats-item">
+                <label>Justificatifs</label>
+                <strong>{stats.nombreJustificatifs}</strong>
+              </div>
+              <div className="stats-item">
+                <label>Missions</label>
+                <strong>{stats.nombreMissions}</strong>
+              </div>
+              <div className="stats-item">
+                <label>Réunions</label>
+                <strong>{stats.nombreReunions}</strong>
+              </div>
+              <div className="stats-item">
+                <label>Score global</label>
+                <strong>{stats.scoreGlobalPonctualite?.toFixed(2)}%</strong>
+              </div>
             </div>
-            <div className="stats-item">
-              <label>Présences</label>
-              <strong>{stats.nombrePresences}</strong>
+
+            <div className="charts-grid">
+              <div className="chart-card">
+                <h3>Répartition des présences</h3>
+                {renderRepartitionChart(stats)}
+              </div>
+
+              <div className="chart-card">
+                <h3>Évolution mensuelle de la ponctualité</h3>
+                {renderEvolutionChart(stats)}
+              </div>
             </div>
-            <div className="stats-item">
-              <label>Retards</label>
-              <strong>{stats.nombreRetards}</strong>
-            </div>
-            <div className="stats-item">
-              <label>Analyses IA</label>
-              <strong>{stats.nombreAnalysesIA}</strong>
-            </div>
-            <div className="stats-item">
-              <label>Justificatifs</label>
-              <strong>{stats.nombreJustificatifs}</strong>
-            </div>
-            <div className="stats-item">
-              <label>Missions</label>
-              <strong>{stats.nombreMissions}</strong>
-            </div>
-            <div className="stats-item">
-              <label>Réunions</label>
-              <strong>{stats.nombreReunions}</strong>
-            </div>
-            <div className="stats-item">
-              <label>Score global</label>
-              <strong>{stats.scoreGlobalPonctualite?.toFixed(2)}%</strong>
-            </div>
-          </div>
+          </>
         ) : (
           <div className="dashboard-placeholder dashboard-placeholder-muted">
             <strong>Impossible de charger les statistiques</strong>
@@ -441,6 +498,79 @@ function AdminDashboard() {
       </section>
     </>
   );
+
+  const PIE_COLORS = ['#2d6b47', '#c9912b', '#c44545'];
+
+  function renderRepartitionChart(stats) {
+    const presentesNettes = Math.max(
+      0,
+      stats.nombrePresences - stats.nombreRetards
+    );
+
+    const data = [
+      { name: 'Présents', value: presentesNettes },
+      { name: 'Retards', value: stats.nombreRetards },
+      { name: 'Absences', value: stats.nombreAbsences || 0 },
+    ];
+
+    const total = data.reduce((sum, d) => sum + d.value, 0);
+
+    if (total === 0) {
+      return (
+        <div className="dashboard-placeholder dashboard-placeholder-muted">
+          <strong>Pas encore de données</strong>
+          <span>Le graphique s'affichera dès les premiers pointages enregistrés.</span>
+        </div>
+      );
+    }
+
+    return (
+      <ResponsiveContainer width="100%" height={260}>
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            cx="50%"
+            cy="50%"
+            outerRadius={90}
+            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+          >
+            {data.map((entry, index) => (
+              <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip />
+          <Legend />
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  function renderEvolutionChart(stats) {
+    const data = stats.evolutionMensuelle || [];
+
+    if (data.length === 0) {
+      return (
+        <div className="dashboard-placeholder dashboard-placeholder-muted">
+          <strong>Pas encore de données</strong>
+          <span>L'évolution apparaîtra dès qu'un historique de plusieurs mois existera.</span>
+        </div>
+      );
+    }
+
+    return (
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="mois" />
+          <YAxis domain={[0, 100]} unit="%" />
+          <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
+          <Bar dataKey="tauxPonctualite" fill="#2d6b47" radius={[6, 6, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    );
+  }
 
   const renderRequests = () => (
     <section className="dashboard-panel dashboard-panel-wide">
@@ -689,7 +819,41 @@ function AdminDashboard() {
 
             <form className="gps-form" onSubmit={handleGpsSubmit} style={{ marginTop: '1rem' }}>
 
+              <div className="dashboard-field">
+                <span>Lieu actuel autorisé</span>
+                <input
+                  type="text"
+                  value={gpsConfig.nomLieu || 'Lieu non défini'}
+                  readOnly
+                  style={{ background: '#f5f6f0', cursor: 'not-allowed' }}
+                />
+              </div>
 
+              <div className="parametres-form-grid" style={{ marginTop: '1rem' }}>
+                <div className="dashboard-field">
+                  <span>Latitude</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={gpsConfig.latitude}
+                    onChange={(e) => setGpsConfig((c) => ({ ...c, latitude: e.target.value }))}
+                    placeholder="Ex: 6.3703"
+                    required
+                  />
+                </div>
+
+                <div className="dashboard-field">
+                  <span>Longitude</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={gpsConfig.longitude}
+                    onChange={(e) => setGpsConfig((c) => ({ ...c, longitude: e.target.value }))}
+                    placeholder="Ex: 2.3912"
+                    required
+                  />
+                </div>
+              </div>
 
               <div className="dashboard-field" style={{ marginTop: '1rem' }}>
                 <span>Rayon de tolérance maximum (en kilomètres)</span>
@@ -706,8 +870,47 @@ function AdminDashboard() {
                 </div>
               </div>
 
-              <button type="submit" className="primary-action-button" disabled={isUpdatingGps} style={{ marginTop: '1.5rem', width: '100%', background: '#4f46e5' }}>
-                {isUpdatingGps ? 'Mise à jour de la restriction...' : 'Appliquer la restriction géographique'}
+              <div className="dashboard-field" style={{ marginTop: '1rem' }}>
+                <span>Nombre de pointages autorisés par jour</span>
+                <select
+                  value={gpsConfig.nombrePointagesParJour}
+                  onChange={(e) => setGpsConfig((c) => ({ ...c, nombrePointagesParJour: Number(e.target.value) }))}
+                >
+                  <option value={1}>1 fois (matin)</option>
+                  <option value={2}>2 fois (matin et soir)</option>
+                  <option value={3}>3 fois (matin, midi, soir)</option>
+                </select>
+              </div>
+
+              <div className="dashboard-field" style={{ marginTop: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                  <div>
+                    <strong>Mode test : désactiver la vérification de zone GPS</strong>
+                    <div style={{ color: '#aaa', fontSize: '0.8rem', marginTop: '2px' }}>
+                      La vérification faciale reste obligatoire. À utiliser uniquement pour les tests hors site.
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={gpsConfig.modeTestSansZone}
+                    onClick={() => setGpsConfig((c) => ({ ...c, modeTestSansZone: !c.modeTestSansZone }))}
+                    className={`gps-toggle ${gpsConfig.modeTestSansZone ? 'gps-toggle-on' : ''}`}
+                  >
+                    <span className="gps-toggle-knob" />
+                  </button>
+                </div>
+              </div>
+
+              {gpsFeedback && (
+                <div className={gpsFeedback.type === 'error' ? 'form-error' : 'form-success'} style={{ margin: '0.75rem 0' }}>
+                  {gpsFeedback.message}
+                </div>
+              )}
+
+              <button type="submit" className="primary-action-button" disabled={isUpdatingGps} style={{ marginTop: '1.5rem', width: '100%' }}>
+                {isUpdatingGps ? 'Mise à jour en cours...' : 'Appliquer les paramètres de pointage'}
               </button>
             </form>
           </div>
@@ -740,9 +943,31 @@ function AdminDashboard() {
 
 
   return (
-    <div className="dashboard-page dashboard-page-clean admin-dashboard-page">
-      <Sidebar role="ADMIN" activePage={activePage} onChangePage={setActivePage} items={ADMIN_ITEMS} user={user}
-  onLogout={logout}  />
+
+ <div className="dashboard-page dashboard-page-clean admin-dashboard-page">
+  <NotificationToast toast={notificationToast} onDismiss={dismissToast} />
+
+  {localToast && (
+    <div
+      className="notification-toast"
+      role="status"
+      style={{
+        background: localToast.type === 'error' ? '#b13030' : '#1a3a2a',
+        top: notificationToast ? '80px' : '20px',
+      }}
+    >
+      <span className="notification-toast-icon">
+        {localToast.type === 'error' ? '⚠️' : '✅'}
+      </span>
+      <span className="notification-toast-text">{localToast.message}</span>
+      <button type="button" className="notification-toast-close" onClick={() => setLocalToast(null)}>
+        ✕
+      </button>
+    </div>
+  )}
+
+  <Sidebar role="ADMIN" activePage={activePage} onChangePage={setActivePage} items={ADMIN_ITEMS} user={user}
+    onLogout={logout} />
 
       <main className="dashboard-main dashboard-main-clean">
         <div className="dashboard-head">
@@ -766,38 +991,49 @@ function AdminDashboard() {
               )}
             </button>
 
-<div className="dashboard-user-profile">
+            <div className="dashboard-user-profile">
 
-  {user?.photoProfil ? (
-    <img
-      src={user.photoProfil}
-      alt={user?.nom}
-      className="dashboard-user-avatar"
-    />
-  ) : (
-    <div className="dashboard-avatar-placeholder">
-      {`${user?.prenom?.[0] || ''}${user?.nom?.[0] || ''}`.toUpperCase()}
-    </div>
-  )}
+              {user?.photoProfil ? (
+                <img
+                  src={user.photoProfil}
+                  alt={user?.nom}
+                  className="dashboard-user-avatar"
+                />
+              ) : (
+                <div className="dashboard-avatar-placeholder">
+                  {`${user?.prenom?.[0] || ''}${user?.nom?.[0] || ''}`.toUpperCase()}
+                </div>
+              )}
 
-</div>
+            </div>
 
           </div>
         </div>
 
         {isNotificationsOpen && (
-          <div className="notifications-dropdown">
-            <Notifications
-              onCountChange={(count) => setNotificationsCount(count)}
+          <>
+            <div
+              className="notifications-overlay"
+              onClick={() => setIsNotificationsOpen(false)}
             />
-          </div>
+            <div className="notifications-dropdown">
+              <button
+                type="button"
+                className="notifications-dropdown-close"
+                onClick={() => setIsNotificationsOpen(false)}
+              >
+                ✕
+              </button>
+              <Notifications onCountChange={(count) => setCountManually(count)} />
+            </div>
+          </>
         )}
 
 
 
         {renderSection()}
 
-       
+
       </main>
     </div>
   );

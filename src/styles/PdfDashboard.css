@@ -1,0 +1,25 @@
+.pdf-sidebar{
+    width:100%;
+    margin-top:20px;
+}
+
+.pdf-sidebar-btn{
+    width:100%;
+    border:none;
+    border-radius:15px;
+    padding:16px;
+
+    background:#1e5eff;
+    color:white;
+
+    font-size:18px;
+    font-weight:600;
+
+    cursor:pointer;
+
+    transition:.3s;
+}
+
+.pdf-sidebar-btn:hover{
+    background:#1749c9;
+}

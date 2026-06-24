@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import {
   fetchNotifications,
   marquerCommeLue,
+  supprimerNotification,
+  supprimerToutesNotifications,
 } from '../../services/notificationService';
 
 function Notifications({ onCountChange }) {
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isClearing, setIsClearing] = useState(false);
 
   const chargerNotifications = async () => {
     try {
@@ -61,6 +64,29 @@ function Notifications({ onCountChange }) {
     }
   };
 
+  const handleClearAll = async () => {
+    setIsClearing(true);
+
+    try {
+      await supprimerToutesNotifications();
+      setNotifications([]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsClearing(false);
+    }
+  };
+  const handleDelete = async (id) => {
+    try {
+      await supprimerNotification(id);
+      setNotifications((current) =>
+        current.filter((notification) => notification.id !== id)
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="notifications-panel">
@@ -83,6 +109,16 @@ function Notifications({ onCountChange }) {
     <div className="notifications-panel">
       <div className="notifications-header">
         <h3>Notifications</h3>
+        {notifications.length > 0 && (
+          <button
+            type="button"
+            className="notifications-clear-btn"
+            onClick={handleClearAll}
+            disabled={isClearing}
+          >
+            {isClearing ? 'Suppression...' : 'Tout effacer'}
+          </button>
+        )}
       </div>
 
       {notifications.length === 0 ? (
@@ -99,8 +135,8 @@ function Notifications({ onCountChange }) {
             <article
               key={notification.id}
               className={`notification-card ${notification.lu
-                  ? 'notification-read'
-                  : 'notification-unread'
+                ? 'notification-read'
+                : 'notification-unread'
                 }`}
             >
               <div className="notification-head">
@@ -126,20 +162,31 @@ function Notifications({ onCountChange }) {
                   ).toLocaleString('fr-FR')}
                 </span>
 
-                {!notification.lu && (
+                <div className="notification-footer-actions">
+                  {!notification.lu && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() =>
+                        handleLire(
+                          notification.id
+                        )
+                      }
+                    >
+                      Marquer comme lue
+                    </button>
+                  )}
+
                   <button
                     type="button"
-                    className="secondary-button"
-                    onClick={() =>
-                      handleLire(
-                        notification.id
-                      )
-                    }
+                    className="notification-delete-btn"
+                    onClick={() => handleDelete(notification.id)}
                   >
-                    Marquer comme lue
+                    Supprimer
                   </button>
-                )}
+                </div>
               </div>
+              
             </article>
           ))}
         </div>

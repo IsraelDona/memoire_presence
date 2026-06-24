@@ -54,12 +54,12 @@ function PhotoUploadInput() {
         {user?.photoProfil ? (
           <img
             src={user.photoProfil}
-            alt="Photo de profil"
+            alt="Profil de l'utilisateur"
             className="photo-upload-img"
           />
         ) : (
           <div className="photo-upload-placeholder">
-            {(user?.nom || user?.name || 'U').charAt(0).toUpperCase()}
+            {`${user?.prenom?.[0] || ''}${user?.nom?.[0] || ''}`.toUpperCase() || 'U'}
           </div>
         )}
       </div>

@@ -21,11 +21,13 @@ import PresenceMap from '../components/map/PresenceMap';
 import { useAuth } from '../context/AuthContext';
 import '../styles/dashboard.css';
 import {
-  updateMonProfil,
-  updatePhotoProfil
+  updateMonProfil
 } from '../services/profilService';
 import PhotoUploadInput from '../components/profil/PhotoUploadInput';
 
+import useNotificationsPolling from '../hooks/useNotificationsPolling';
+import NotificationToast from '../components/notifications/NotificationToast';
+import { reverseGeocode } from '../services/gpsService';
 
 const ROLE_CONTENT = {
   CHEF_SERVICE: {
@@ -123,13 +125,6 @@ function calculateDistanceKm(start, end) {
   return earthRadiusKm * c;
 }
 
-function formatCoordinate(value) {
-  if (!Number.isFinite(value)) {
-    return '—';
-  }
-
-  return value.toFixed(6);
-}
 
 function formatDistanceLabel(distanceKm) {
   if (!Number.isFinite(distanceKm)) {
@@ -244,8 +239,9 @@ function Dashboard({ user }) {
     dateDebut: '',
     dateFin: '',
   });
-  const [pointageFeedback, setPointageFeedback] = useState(null);
+
   const [isSubmittingPointage, setIsSubmittingPointage] = useState(false);
+  const [pointageFeedback, setPointageFeedback] = useState(null);
   const [pointageType, setPointageType] = useState(DEFAULT_POINTAGE);
   const [currentPosition, setCurrentPosition] = useState(null);
   const [isFaceVerificationOpen, setIsFaceVerificationOpen] = useState(false);
@@ -272,7 +268,7 @@ function Dashboard({ user }) {
   });
   const [chefJustificatifs, setChefJustificatifs] = useState([]);
   const [isLoadingChefJustificatifs, setIsLoadingChefJustificatifs] = useState(false);
-  const [chefJustificatifsFeedback, setChefJustificatifsFeedback] = useState(null);
+
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
   const [hasLoadedAgentJustificatifs, setHasLoadedAgentJustificatifs] = useState(false);
   const [hasLoadedChefPresences, setHasLoadedChefPresences] = useState(false);
@@ -290,21 +286,41 @@ function Dashboard({ user }) {
     email: '',
     motDePasse: '',
   });
+
   const [profilFeedback, setProfilFeedback] = useState(null);
   const [isUpdatingProfil, setIsUpdatingProfil] = useState(false);
 
-
   const [isNotificationsOpen, setIsNotificationsOpen] =
     useState(false);
-  const [notificationsCount, setNotificationsCount] =
-    useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const {
+    count: notificationsCount,
+    toast: notificationToast,
+    dismissToast,
+    setCountManually,
+  } = useNotificationsPolling();
 
-  const handleNotificationsCountChange = (
-    count
-  ) => {
-    setNotificationsCount(count);
+  const [localToast, setLocalToast] = useState(null);
+
+  const showLocalToast = ({ type, message }) => {
+    setLocalToast({ type, message, id: Date.now() });
+    setTimeout(() => setLocalToast(null), 5000);
   };
+
+  const notifierAction = (setFeedbackFn, type, message) => {
+    setFeedbackFn({ type, message });
+
+    setTimeout(() => {
+      setFeedbackFn(null);
+      showLocalToast({ type, message });
+    }, 2500);
+  };
+
+  const handleNotificationsCountChange = (count) => {
+    setCountManually(count);
+  };
+
+  const [nomLieuAgent, setNomLieuAgent] = useState(null);
 
   const roleKey = normalizeRole(user?.roleKey ?? user?.role);
   const roleContent = ROLE_CONTENT[roleKey] ?? ROLE_CONTENT.AGENT;
@@ -369,10 +385,10 @@ function Dashboard({ user }) {
     try {
       const response = await fetchMesJustificatifs();
       setAgentJustificatifs(response.justificatifs);
-      setAgentJustificatifsFeedback(null);
+
     } catch (error) {
       setAgentJustificatifs([]);
-      setAgentJustificatifsFeedback({
+      showLocalToast({
         type: 'error',
         message: error?.message || 'Impossible de charger les demandes et justificatifs.',
       });
@@ -424,20 +440,11 @@ function Dashboard({ user }) {
     }
   }, [roleKey]);
 
-  useEffect(() => {
-    if (!profilFeedback) return;
 
-    const timer = setTimeout(() => {
-      setProfilFeedback(null);
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, [profilFeedback]);
 
   const handleProfilSubmit = async (event) => {
     event.preventDefault();
 
-    setProfilFeedback(null);
     setIsUpdatingProfil(true);
 
     try {
@@ -447,26 +454,14 @@ function Dashboard({ user }) {
         email: profilForm.email || undefined,
         motDePasse: profilForm.motDePasse || undefined,
       });
-      console.log("updatedProfile =", updatedProfile);
 
       const updatedUser = {
-        name:
-          updatedProfile?.nom
-            ? `${updatedProfile.nom} ${updatedProfile.prenom}`
-            : `${profilForm.nom || ''} ${profilForm.prenom || ''}`.trim(),
-
-        email:
-          updatedProfile?.email ||
-          profilForm.email,
+        nom: updatedProfile?.nom || profilForm.nom || user?.nom,
+        prenom: updatedProfile?.prenom || profilForm.prenom || user?.prenom,
+        email: updatedProfile?.email || profilForm.email,
       };
 
       updateUser(updatedUser);
-
-      setProfilFeedback({
-        type: 'success',
-        message: 'Profil mis à jour avec succès.',
-      });
-
       setProfilForm({
         nom: '',
         prenom: '',
@@ -474,13 +469,14 @@ function Dashboard({ user }) {
         motDePasse: '',
       });
 
+      notifierAction(setProfilFeedback, 'success', 'Profil mis à jour avec succès.');
+
     } catch (error) {
-      setProfilFeedback({
-        type: 'error',
-        message:
-          error?.message ||
-          'Impossible de mettre à jour le profil.',
-      });
+      notifierAction(
+        setProfilFeedback,
+        'error',
+        error?.message || 'Impossible de mettre à jour le profil.'
+      );
     } finally {
       setIsUpdatingProfil(false);
     }
@@ -533,10 +529,10 @@ function Dashboard({ user }) {
     try {
       const response = await fetchJustificatifsChef();
       setChefJustificatifs(response.justificatifs);
-      setChefJustificatifsFeedback(null);
+
     } catch (error) {
       setChefJustificatifs([]);
-      setChefJustificatifsFeedback({
+      showLocalToast({
         type: 'error',
         message: error?.message || 'Impossible de charger les justificatifs.',
       });
@@ -581,14 +577,11 @@ function Dashboard({ user }) {
 
       const nouvelleAnalyse = await genererAnalyseIA();
 
-      setAnalysesIA((current) => [
-        nouvelleAnalyse,
-        ...current,
-      ]);
+      setAnalysesIA([nouvelleAnalyse]);
 
       setAnalysesIAFeedback({
         type: 'success',
-        message: 'Analyse IA générée avec succès.',
+        message: 'Analyse actualisée avec succès.',
       });
 
     } catch (error) {
@@ -596,7 +589,7 @@ function Dashboard({ user }) {
         type: 'error',
         message:
           error?.response?.data?.message ||
-          'Une analyse IA a déjà été générée aujourd’hui.',
+          'Impossible d’actualiser l’analyse.',
       });
     } finally {
       setIsGeneratingAnalyseIA(false);
@@ -604,17 +597,7 @@ function Dashboard({ user }) {
   };
 
 
-  const hasAnalysisTodayIA = () => {
-    const today = new Date().toISOString().split('T')[0];
 
-    return analysesIA.some((analyse) => {
-      if (!analyse.dateAnalyse) {
-        return false;
-      }
-
-      return analyse.dateAnalyse.startsWith(today);
-    });
-  };
 
 
   useEffect(() => {
@@ -671,15 +654,18 @@ function Dashboard({ user }) {
 
   const handleAgentJustificatifSubmit = async (event) => {
     event.preventDefault();
-    setAgentJustificatifsFeedback(null);
+
     setIsSubmittingAgentJustificatif(true);
 
     try {
       const response = await submitJustificatif(agentJustificatifForm);
-      setAgentJustificatifsFeedback({
-        type: 'success',
-        message: response.message || 'Demande transmise avec succès.',
-      });
+
+      notifierAction(
+        setAgentJustificatifsFeedback,
+        'success',
+        response.message || 'Demande transmise avec succès.'
+      );
+
       setAgentJustificatifForm({
         typeJustificatif: '',
         motif: '',
@@ -688,27 +674,31 @@ function Dashboard({ user }) {
       });
       await loadAgentJustificatifs({ silent: true });
     } catch (error) {
-      console.error('submitJustificatif error:', error);
       const errorMessage = error?.response?.data?.message
         || error?.response?.data?.error
         || error?.message
         || 'Impossible de transmettre la demande.';
-      setAgentJustificatifsFeedback({
-        type: 'error',
-        message: errorMessage,
-      });
+
+      notifierAction(setAgentJustificatifsFeedback, 'error', errorMessage);
     } finally {
       setIsSubmittingAgentJustificatif(false);
     }
   };
 
   const handlePointage = async () => {
-    setPointageFeedback(null);
+
     setIsSubmittingPointage(true);
 
     try {
       const position = await getPosition();
       setCurrentPosition(position);
+
+      try {
+        const geo = await reverseGeocode(position.latitude, position.longitude);
+        setNomLieuAgent(geo?.nomLieu || null);
+      } catch {
+        setNomLieuAgent(null);
+      }
 
       const response = await marquerPresence({
         latitude: position.latitude,
@@ -716,24 +706,23 @@ function Dashboard({ user }) {
         typePresence: pointageType,
       });
 
-      setPointageFeedback({
-        type: 'success',
-        message: response.message,
-      });
+      notifierAction(setPointageFeedback, 'success', response.message);
+
       await loadHistory({ silent: true });
       setActivePage('overview');
     } catch (error) {
-      setPointageFeedback({
-        type: 'error',
-        message: error?.message || 'Impossible de marquer la présence.',
-      });
+      notifierAction(
+        setPointageFeedback,
+        'error',
+        error?.message || 'Impossible de marquer la présence.'
+      );
     } finally {
       setIsSubmittingPointage(false);
     }
   };
 
   const openFaceVerificationBeforePointage = () => {
-    setPointageFeedback(null);
+
     setIsFaceVerificationOpen(true);
   };
 
@@ -812,9 +801,7 @@ function Dashboard({ user }) {
           </span>
         </div>
 
-        {pointageFeedback && pointageFeedback.type === 'success' && (
-          <div className="form-success">{pointageFeedback.message}</div>
-        )}
+
 
         <div className="agent-status-grid">
           <article className="dashboard-placeholder agent-status-card">
@@ -830,10 +817,9 @@ function Dashboard({ user }) {
             <strong>Localisation</strong>
             <span>
               {currentPosition
-                ? `${getGpsLabel()} · ${formatDistanceLabel(calculateDistanceKm(currentPosition, MINISTRY_ZONE))}${Number.isFinite(currentPosition.accuracy)
-                  ? ` · précision ±${Math.round(currentPosition.accuracy)} m`
-                  : ''
-                }`
+                ? nomLieuAgent
+                  ? `📍 ${nomLieuAgent} · ${formatDistanceLabel(calculateDistanceKm(currentPosition, MINISTRY_ZONE))}`
+                  : `${getGpsLabel()} · ${formatDistanceLabel(calculateDistanceKm(currentPosition, MINISTRY_ZONE))}`
                 : 'La localisation sera capturée au moment du pointage.'}
             </span>
           </article>
@@ -853,7 +839,7 @@ function Dashboard({ user }) {
       <section className="dashboard-hero-card-agent-hero-card">
         <div className="dashboard-hero-copy">
           <span className="dashboard-status-pill">{roleContent.subtitle}</span>
-          <h1>Bienvenue, {user?.name || 'utilisateur'}.</h1>
+          <h1>Bienvenue, {user?.prenom || user?.nom || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
 
@@ -870,7 +856,7 @@ function Dashboard({ user }) {
       <section className="dashboard-hero-card agent-hero-card">
         <div className="dashboard-hero-copy">
           <span className="dashboard-status-pill">{roleContent.subtitle}</span>
-          <h1>Bienvenue, {user?.name || 'utilisateur'}.</h1>
+          <h1>Bienvenue, {user?.prenom || user?.nom || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
       </section>
@@ -891,107 +877,96 @@ function Dashboard({ user }) {
         <span className="dashboard-status-pill">Pointage personnel</span>
       </div>
 
-      {pointageFeedback && pointageFeedback.type === 'error' && <div className="form-error">{pointageFeedback.message}</div>}
+      {pointageFeedback && (
+        <div className={pointageFeedback.type === 'error' ? 'form-error' : 'form-success'}>
+          {pointageFeedback.message}
+        </div>
+      )}
 
-      <div className="agent-pointage-grid">
-        <article className="dashboard-placeholder gps-map-card">
-          <div className="gps-map-head">
-            <div>
-              <strong>Carte GPS — Bénin</strong>
-              <span>
-                {MINISTRY_ZONE.label} · périmètre autorisé{' '}
-                {MINISTRY_ZONE.radiusKm.toFixed(0)} km
+        <div className="agent-pointage-grid">
+          <article className="dashboard-placeholder gps-map-card">
+            <div className="gps-map-head">
+              <div>
+                <strong>Carte GPS — Bénin</strong>
+                <span>
+                  {MINISTRY_ZONE.label} · périmètre autorisé{' '}
+                  {MINISTRY_ZONE.radiusKm.toFixed(0)} km
+                </span>
+              </div>
+              <span className={`presence-status-badge ${currentPosition ? 'is-present' : 'is-gps'
+                }`}>
+                {currentPosition ? 'Position capturée' : 'En attente'}
               </span>
             </div>
-            <span className={`presence-status-badge ${currentPosition ? 'is-present' : 'is-gps'
-              }`}>
-              {currentPosition ? 'Position capturée' : 'En attente'}
-            </span>
+
+            <PresenceMap
+              userPosition={currentPosition}
+              rayonKm={MINISTRY_ZONE.radiusKm}
+            />
+
+            <div className="gps-map-footer">
+              <div>
+                <span>Distance au lieu autorisé</span>
+                <strong>
+                  {currentPosition
+                    ? `${calculateDistanceKm(currentPosition, MINISTRY_ZONE).toFixed(2)} km`
+                    : 'En attente'}
+                </strong>
+              </div>
+              <div>
+                <span>Lieu détecté</span>
+                <strong style={{ color: '#2d6b47', fontSize: '0.85rem' }}>
+                  {nomLieuAgent
+                    ? `📍 ${nomLieuAgent}`
+                    : currentPosition
+                      ? 'Résolution du lieu...'
+                      : '—'}
+                </strong>
+              </div>
+            </div>
+          </article>
+          <div className="agent-pointage-outer">
+            <button
+              type="button"
+              className="agent-pointage-orb"
+              onClick={openFaceVerificationBeforePointage}
+              disabled={isSubmittingPointage}
+            >
+              <span className="agent-pointage-orb-icon">
+                <FingerprintIcon />
+                <MapPinIcon />
+              </span>
+              <strong>{isSubmittingPointage ? 'Pointage en cours...' : 'Vérifier puis pointer'}</strong>
+              <span>Visage + GPS · zone autorisée par le backend</span>
+            </button>
+
+            <div className="agent-pointage-statusline">
+              <span className={`presence-status-badge ${getPresenceBadgeClass(latestPresence?.statutPresence)}`}>
+                {latestPresence ? formatPresenceStatus(latestPresence.statutPresence) : 'Non pointé'}
+              </span>
+              <p>Le pointage passe d’abord par la vérification faciale, puis envoie latitude et longitude au backend.</p>
+            </div>
           </div>
 
-          <PresenceMap
-            userPosition={currentPosition}
-            rayonKm={MINISTRY_ZONE.radiusKm}
-          />
+        </div>
 
-          <div className="gps-map-footer">
-            <div>
-              <span>Latitude</span>
-              <strong>
-                {currentPosition
-                  ? formatCoordinate(currentPosition.latitude)
-                  : '—'}
-              </strong>
-            </div>
-            <div>
-              <span>Longitude</span>
-              <strong>
-                {currentPosition
-                  ? formatCoordinate(currentPosition.longitude)
-                  : '—'}
-              </strong>
-            </div>
-            <div>
-              <span>Distance</span>
-              <strong>
-                {currentPosition
-                  ? `${calculateDistanceKm(
-                    currentPosition,
-                    MINISTRY_ZONE
-                  ).toFixed(2)} km`
-                  : 'En attente'}
-              </strong>
-            </div>
+
+
+        <div className="admin-form-grid agent-pointage-form">
+          <label className="field-input-wrap field-input-wrap-plain">
+            <select value={pointageType} onChange={(event) => setPointageType(event.target.value)}>
+              <option value="BUREAU">Bureau</option>
+              <option value="MISSION">Mission</option>
+              <option value="REUNION">Réunion</option>
+            </select>
+          </label>
+
+          <div className="admin-form-actions">
+            <button type="button" className="secondary-button" onClick={goToHistory}>
+              Voir l’historique
+            </button>
           </div>
-        </article>
-
-        <div className="dashboard-placeholder agent-pointage-card agent-pointage-sidecard">
-          <strong>Statut attendu</strong>
-          <span>
-            Le backend calcule automatiquement <strong>PRESENT</strong> ou <strong>RETARD</strong> selon l’heure et
-            la vérification géographique du ministère.
-          </span>
         </div>
-      </div>
-
-      <div className="agent-pointage-outer">
-        <button
-          type="button"
-          className="agent-pointage-orb"
-          onClick={openFaceVerificationBeforePointage}
-          disabled={isSubmittingPointage}
-        >
-          <span className="agent-pointage-orb-icon">
-            <FingerprintIcon />
-            <MapPinIcon />
-          </span>
-          <strong>{isSubmittingPointage ? 'Pointage en cours...' : 'Vérifier puis pointer'}</strong>
-          <span>Visage + GPS · zone autorisée par le backend</span>
-        </button>
-
-        <div className="agent-pointage-statusline">
-          <span className={`presence-status-badge ${getPresenceBadgeClass(latestPresence?.statutPresence)}`}>
-            {latestPresence ? formatPresenceStatus(latestPresence.statutPresence) : 'Non pointé'}
-          </span>
-          <p>Le pointage passe d’abord par la vérification faciale, puis envoie latitude et longitude au backend.</p>
-        </div>
-      </div>
-
-      <div className="admin-form-grid agent-pointage-form">
-        <label className="field-input-wrap field-input-wrap-plain">
-          <select value={pointageType} onChange={(event) => setPointageType(event.target.value)}>
-            <option value="BUREAU">Bureau</option>
-            <option value="MISSION">Mission</option>
-            <option value="REUNION">Réunion</option>
-          </select>
-        </label>
-
-        <div className="admin-form-actions">
-          <button type="button" className="secondary-button" onClick={goToHistory}>
-            Voir l’historique
-          </button>
-        </div>
-      </div>
     </section>
   );
 
@@ -1324,9 +1299,11 @@ function Dashboard({ user }) {
                     <td>{formatPresenceType(item.typePresence)}</td>
                     <td>
                       <strong>
-                        {hasCoordinates
-                          ? `${formatCoordinate(latitude)}, ${formatCoordinate(longitude)}`
-                          : 'Coordonnées à charger'}
+                        {item.nomLieu
+                          ? `📍 ${item.nomLieu}`
+                          : hasCoordinates
+                            ? 'Résolution du lieu...'
+                            : '—'}
                       </strong>
                       <div className="table-subnote">Suivi de zone pour le chef de service.</div>
                     </td>
@@ -1562,9 +1539,7 @@ function Dashboard({ user }) {
         <span className="dashboard-status-pill">Validation</span>
       </div>
 
-      {chefJustificatifsFeedback && chefJustificatifsFeedback.type === 'error' && (
-        <div className="form-error">{chefJustificatifsFeedback.message}</div>
-      )}
+
 
       {isLoadingChefJustificatifs ? (
         <div className="dashboard-placeholder">
@@ -1619,81 +1594,135 @@ function Dashboard({ user }) {
       includeAnalytics: true,
     });
 
-  const renderAnalyseIAPanel = () => (
-    <section className="dashboard-panel dashboard-panel-wide">
-      <div className="admin-section-head">
-        <div>
-          <h2>Analyse intelligente</h2>
-          <p className="panel-note">Analyse automatique de vos présences basée sur l'IA.</p>
+  const renderAnalyseIAPanel = () => {
+    const analyseDuJour = analysesIA[0];
+
+    return (
+      <section className="dashboard-panel dashboard-panel-wide">
+        <div className="admin-section-head">
+          <div>
+            <h2>Analyse intelligente</h2>
+            <p className="panel-note">
+              Votre conseiller personnel basé sur vos données de présence.
+            </p>
+          </div>
+          <span className="dashboard-status-pill">Synthèse IA</span>
         </div>
-        <span className="dashboard-status-pill">Synthèse IA</span>
-      </div>
 
-      {analysesIAFeedback && analysesIAFeedback.type === 'error' && (
-        <div className="form-error">{analysesIAFeedback.message}</div>
-      )}
-      {analysesIAFeedback && analysesIAFeedback.type === 'success' && (
-        <div className="form-success">{analysesIAFeedback.message}</div>
-      )}
+        {analysesIAFeedback && analysesIAFeedback.type === 'error' && (
+          <div className="form-error">{analysesIAFeedback.message}</div>
+        )}
+        {analysesIAFeedback && analysesIAFeedback.type === 'success' && (
+          <div className="form-success">{analysesIAFeedback.message}</div>
+        )}
 
-      <button
-        type="button"
-        className="primary-button"
-        onClick={handleGenererAnalyseIA}
-        disabled={isGeneratingAnalyseIA || isLoadingAnalysesIA}
-        title={hasAnalysisTodayIA() ? 'Une analyse a déjà été générée aujourd\'hui' : ''}
-      >
-        {isGeneratingAnalyseIA
-          ? 'Génération en cours...'
-          : 'Générer analyse'}
-      </button>
+        {isLoadingAnalysesIA ? (
+          <div className="dashboard-placeholder" style={{ marginTop: '16px' }}>
+            <strong>Chargement de votre analyse</strong>
+            <span>Connexion au backend en cours...</span>
+          </div>
+        ) : !analyseDuJour ? (
+          <div className="dashboard-placeholder dashboard-placeholder-muted" style={{ marginTop: '16px' }}>
+            <strong>Aucune analyse disponible pour le moment</strong>
+            <span>Votre première analyse sera générée automatiquement après votre premier pointage.</span>
+          </div>
+        ) : (
+          <>
+            {renderConseillerCard(analyseDuJour)}
 
-      {isLoadingAnalysesIA ? (
-        <div className="dashboard-placeholder" style={{ marginTop: '20px' }}>
-          <strong>Chargement des analyses</strong>
-          <span>Connexion au backend en cours...</span>
+            <div className="admin-form-actions" style={{ marginTop: '14px' }}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleGenererAnalyseIA}
+                disabled={isGeneratingAnalyseIA}
+              >
+                {isGeneratingAnalyseIA ? 'Actualisation...' : 'Actualiser mon analyse'}
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+    );
+  };
+
+  function getBadgeAffichage(badge) {
+    switch (badge) {
+      case 'EXEMPLAIRE':
+        return { emoji: '🥇', label: 'Exemplaire' };
+      case 'TRES_BON':
+        return { emoji: '🥈', label: 'Très bon' };
+      case 'MOYEN':
+        return { emoji: '🥉', label: 'Moyen' };
+      default:
+        return { emoji: '⚠️', label: 'À améliorer' };
+    }
+  }
+
+  function getScoreColorClass(score) {
+    if (score >= 90) return 'score-excellent';
+    if (score >= 75) return 'score-bon';
+    if (score >= 50) return 'score-moyen';
+    return 'score-faible';
+  }
+
+  const renderConseillerCard = (analyse) => {
+    const badgeInfo = getBadgeAffichage(analyse.badge);
+    const scoreClass = getScoreColorClass(analyse.scorePonctualite);
+
+    return (
+      <article className="conseiller-card">
+        <div className="conseiller-header">
+          <div className="conseiller-score-wrap">
+            <div className={`conseiller-score-circle ${scoreClass}`}>
+              <strong>{Math.round(analyse.scorePonctualite)}%</strong>
+              <span>ponctualité</span>
+            </div>
+          </div>
+
+          <div className="conseiller-badge-info">
+            <span className="conseiller-badge-pill">
+              {badgeInfo.emoji} {badgeInfo.label}
+            </span>
+            {analyse.serieJours > 0 && (
+              <span className="conseiller-streak">
+                🔥 {analyse.serieJours} jour(s) consécutif(s)
+              </span>
+            )}
+            <span className="conseiller-date">
+              Analyse du {formatDateTime(analyse.dateAnalyse)}
+            </span>
+          </div>
         </div>
-      ) : analysesIA.length === 0 ? (
-        <div className="dashboard-placeholder dashboard-placeholder-muted" style={{ marginTop: '20px' }}>
-          <strong>Aucune analyse disponible</strong>
-          <span>Cliquez sur "Générer analyse" pour créer votre première analyse IA.</span>
+
+        <div className="conseiller-message">
+          <strong>{analyse.recommandation}</strong>
         </div>
-      ) : (
-        <div className="analyses-list" style={{ marginTop: '20px' }}>
-          {analysesIA.map((analyse) => (
-            <article key={analyse.id} className="analyse-card">
-              <div className="analyse-header">
-                <strong>Score ponctualité : {analyse.scorePonctualite?.toFixed(2)}%</strong>
-                <span className="analyse-date">{formatDateTime(analyse.dateAnalyse)}</span>
-              </div>
 
-              <div className="analyse-grid">
-                <div className="analyse-item">
-                  <label>Taux présence</label>
-                  <strong>{analyse.tauxPresence?.toFixed(2)}%</strong>
-                </div>
+        {analyse.conseil && (
+          <div className="conseiller-tip">
+            <span className="conseiller-tip-icon">💡</span>
+            <p>{analyse.conseil}</p>
+          </div>
+        )}
 
-                <div className="analyse-item">
-                  <label>Régularité</label>
-                  <strong>{analyse.niveauRegularite}</strong>
-                </div>
-              </div>
-
-              <div className="analyse-recommandation">
-                <label>Recommandation</label>
-                <p>{analyse.recommandation}</p>
-              </div>
-
-
-            </article>
-          ))}
+        <div className="conseiller-footer-grid">
+          <div className="conseiller-mini-stat">
+            <span>Taux de présence</span>
+            <strong>{analyse.tauxPresence?.toFixed(0)}%</strong>
+          </div>
+          <div className="conseiller-mini-stat">
+            <span>Régularité</span>
+            <strong>{analyse.niveauRegularite}</strong>
+          </div>
         </div>
-      )}
-    </section>
-  );
+      </article>
+    );
+  };
+
 
   const renderParametresPanel = () => (
-    
+
     <section className="dashboard-panel dashboard-panel-wide">
       <div className="admin-section-head">
         <div>
@@ -1715,14 +1744,17 @@ function Dashboard({ user }) {
           </div>
           <strong>Informations actuelles</strong>
           <div className="profil-info-grid">
+
             <div className="profil-info-item">
               <span>Nom complet: </span>
-              <strong>{user?.name || '—'}</strong>
+              <strong>{[user?.prenom, user?.nom].filter(Boolean).join(' ') || '—'}</strong>
             </div>
+
             <div className="profil-info-item">
               <span>Email: </span>
               <strong>{user?.email || '—'}</strong>
             </div>
+
             <div className="profil-info-item">
               <span>Rôle: </span>
               <strong>{roleContent.title}</strong>
@@ -1735,14 +1767,11 @@ function Dashboard({ user }) {
           <strong>Modifier le profil</strong>
 
           {profilFeedback && (
-            <div className={
-              profilFeedback.type === 'error'
-                ? 'form-error'
-                : 'form-success'
-            }>
+            <div className={profilFeedback.type === 'error' ? 'form-error' : 'form-success'}>
               {profilFeedback.message}
             </div>
           )}
+
 
           <form
             className="parametres-form"
@@ -1897,13 +1926,13 @@ function Dashboard({ user }) {
         </section>
       );
     }
-    
+
     console.log(user);
 
     return (
       <section className="dashboard-hero-card">
         <div className="dashboard-hero-copy">
-          <h1>Bienvenue, {user?.name || 'utilisateur'}.</h1>
+          <h1>Bienvenue, {user?.nom || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
 
@@ -1921,8 +1950,31 @@ function Dashboard({ user }) {
 
   return (
     <div className="dashboard-page dashboard-page-clean">
+      <NotificationToast toast={notificationToast} onDismiss={dismissToast} />
+      {localToast && (
+        <div
+          className="notification-toast"
+          role="status"
+          style={{
+            background: localToast.type === 'error' ? '#b13030' : '#1a3a2a',
+            top: notificationToast ? '80px' : '20px',
+          }}
+        >
+          <span className="notification-toast-icon">
+            {localToast.type === 'error' ? '⚠️' : '✅'}
+          </span>
+          <span className="notification-toast-text">{localToast.message}</span>
+          <button
+            type="button"
+            className="notification-toast-close"
+            onClick={() => setLocalToast(null)}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div
-        className={`dashboard-sidebar ${sidebarOpen ? 'open' : ''}`}
+        className={`sidebar-drawer ${sidebarOpen ? 'open' : ''}`}
       >
         <button
           className="dashboard-close-btn"
@@ -1969,11 +2021,7 @@ function Dashboard({ user }) {
                 />
               ) : (
                 <div className="dashboard-avatar-placeholder">
-                  {(user?.name || 'U')
-                    .split(' ')
-                    .map(part => part[0])
-                    .join('')
-                    .toUpperCase()}
+                  {`${user?.prenom?.[0] || ''}${user?.nom?.[0] || ''}`.toUpperCase() || 'U'}
                 </div>
               )}
 
@@ -1982,20 +2030,22 @@ function Dashboard({ user }) {
         </div>
 
         {isNotificationsOpen && (
-          <div className="notifications-dropdown">
-            <Notifications onCountChange={handleNotificationsCountChange} />
-          </div>
-        )}
-
-
-        {isNotificationsOpen && (
-          <div className="notifications-dropdown">
-            <Notifications
-              onCountChange={
-                handleNotificationsCountChange
-              }
+          <>
+            <div
+              className="notifications-overlay"
+              onClick={() => setIsNotificationsOpen(false)}
             />
-          </div>
+            <div className="notifications-dropdown">
+              <button
+                type="button"
+                className="notifications-dropdown-close"
+                onClick={() => setIsNotificationsOpen(false)}
+              >
+                ✕
+              </button>
+              <Notifications onCountChange={handleNotificationsCountChange} />
+            </div>
+          </>
         )}
         {renderBody()}
 
@@ -2009,10 +2059,10 @@ function Dashboard({ user }) {
 
       <FaceVerificationModal
         open={isFaceVerificationOpen}
-        userName={user?.name || 'agent'}
+        userName={user?.nom || 'agent'}
         onClose={() => {
           setIsFaceVerificationOpen(false);
-          setPointageFeedback({
+          showLocalToast({
             type: 'error',
             message: 'La vérification faciale est obligatoire avant le pointage.',
           });
