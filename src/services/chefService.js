@@ -99,3 +99,18 @@ export {
   fetchEquipePresences,
   fetchJustificatifsChef,
 };
+export async function fetchAgentsDuService() {
+  const response = await api.get('/api/chef-service/agents');
+  return response.data;
+}
+// Valider un justificatif (ACCEPTE)
+export const validerJustificatif = (justificatifId) => {
+  return api.put(`/chef-service/justificatifs/${justificatifId}/accepter`);
+};
+
+// Refuser un justificatif (avec motif optionnel)
+export const refuserJustificatif = (justificatifId, motifRefus = '') => {
+  return api.put(`/chef-service/justificatifs/${justificatifId}/refuser`, { motifRefus });
+};
+
+

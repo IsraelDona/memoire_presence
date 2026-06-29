@@ -527,6 +527,7 @@
 
 .admin-section-head {
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
@@ -1205,4 +1206,484 @@
 
 .gps-toggle-on .gps-toggle-knob {
   transform: translateX(24px);
+}
+
+/* =====================
+   CHEF JUSTIFICATIFS
+   ===================== */
+.chef-justificatifs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.chef-justificatif-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.chef-justificatif-body {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chef-justificatif-employe {
+  font-weight: 600;
+  color: #1a3a2a;
+}
+
+.chef-justificatif-date {
+  font-size: 0.85rem;
+  color: #7a8a7a;
+}
+
+.chef-justificatif-description {
+  margin: 4px 0 0;
+  color: #5a6b5a;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.chef-justificatif-refus {
+  margin: 4px 0 0;
+  color: #b13030;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.chef-justificatif-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e8ece0;
+}
+
+.admin-mini-button-success {
+  background: linear-gradient(180deg, #2d6b47 0%, #1a3a2a 100%);
+  color: #fff;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 4px 12px rgba(26,58,42,0.15);
+}
+
+.admin-mini-button-success:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(26,58,42,0.22);
+}
+
+.admin-mini-button-danger {
+  background: #fff;
+  color: #b13030;
+  border: 1.5px solid #b13030;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.admin-mini-button-danger:hover {
+  background: #fdeeee;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 1080px) {
+  .chef-justificatifs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =====================
+   CHEF JUSTIFICATIFS - STYLES PROPRES
+   ===================== */
+.chef-justificatifs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.chef-justificatif-card {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #d4ddc8;
+  padding: 18px 20px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(26, 58, 42, 0.06);
+}
+
+.chef-justificatif-card:hover {
+  box-shadow: 0 4px 16px rgba(26, 58, 42, 0.12);
+  border-color: #2d6b47;
+}
+
+.chef-justificatif-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.chef-justificatif-header strong {
+  color: #1a3a2a;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.chef-justificatif-employe {
+  font-weight: 600;
+  color: #1a3a2a;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chef-justificatif-date {
+  font-size: 0.82rem;
+  color: #7a8a7a;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chef-justificatif-body {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+
+.chef-justificatif-description {
+  margin: 4px 0 0;
+  color: #5a6b5a;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  padding: 8px 12px;
+  background: #f5f6f0;
+  border-radius: 6px;
+}
+
+.chef-justificatif-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e8ece0;
+}
+
+/* BOUTONS PROPREMENT STYLÉS */
+.admin-mini-button-success {
+  background: linear-gradient(180deg, #2d6b47 0%, #1a3a2a 100%);
+  color: #ffffff;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(26, 58, 42, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-mini-button-success:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(26, 58, 42, 0.25);
+  background: linear-gradient(180deg, #1a3a2a 0%, #0f2019 100%);
+}
+
+.admin-mini-button-danger {
+  background: #ffffff;
+  color: #b13030;
+  border: 1.5px solid #b13030;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-mini-button-danger:hover {
+  background: #fef2f2;
+  transform: translateY(-1px);
+  border-color: #8f1a1a;
+}
+
+/* BADGE STATUT PROPRE */
+.presence-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.presence-status-badge.is-present {
+  background: linear-gradient(180deg, #2d6b47 0%, #1a3a2a 100%);
+}
+
+.presence-status-badge.is-late {
+  background: linear-gradient(180deg, #d08b17 0%, #a86e0e 100%);
+}
+
+.presence-status-badge.is-gps {
+  background: linear-gradient(180deg, #4a6fa5 0%, #2d4f7a 100%);
+}
+
+@media (max-width: 1080px) {
+  .chef-justificatifs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =====================
+   NAVIGATION HEADER - DESKTOP & RESPONSIVE
+   ===================== */
+.dashboard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0 16px;
+  border-bottom: 1px solid #d4ddc8;
+  margin-bottom: 22px;
+}
+
+.dashboard-head-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-head-left h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #1a3a2a;
+}
+
+.dashboard-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dashboard-user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.dashboard-user-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1a3a2a;
+}
+
+.dashboard-user-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #d4ddc8;
+  flex-shrink: 0;
+}
+
+.dashboard-avatar-placeholder {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #2d6b47 0%, #1a3a2a 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.notification-bell {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #d4ddc8;
+  background: #fff;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  transition: all 0.18s ease;
+  flex-shrink: 0;
+}
+
+.notification-bell:hover {
+  background: #e8f0ea;
+  border-color: #2d6b47;
+}
+
+.notification-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #b13030;
+  color: #fff;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid #fff;
+}
+
+/* RESPONSIVE - MOBILE */
+@media (max-width: 1100px) {
+  .dashboard-head {
+    flex-wrap: wrap;
+    padding: 12px 0 12px;
+  }
+
+  .dashboard-head-left h1 {
+    font-size: 1.1rem;
+  }
+
+  .dashboard-user-name {
+    display: none;
+  }
+
+  .dashboard-menu-btn {
+    display: flex !important;
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 10px;
+    background: #1a3a2a;
+    color: #fff;
+    font-size: 1.4rem;
+    cursor: pointer;
+    z-index: 1200;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(26, 58, 42, 0.2);
+  }
+
+  .dashboard-close-btn {
+    display: flex !important;
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: #f5f6f0;
+    color: #1a3a2a;
+    font-size: 1rem;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    z-index: 1400;
+  }
+
+  .sidebar-drawer {
+    position: fixed;
+    top: 0;
+    left: -300px;
+    width: 280px;
+    height: 100vh;
+    z-index: 1300;
+    transition: 0.3s ease;
+    overflow-y: auto;
+    background: linear-gradient(180deg, #1a3a2a 0%, #112a1d 100%);
+  }
+
+  .sidebar-drawer.open {
+    left: 0;
+  }
+
+  .dashboard-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1250;
+  }
+
+  .dashboard-main-clean {
+    padding: 80px 16px 20px;
+  }
+}
+
+/* DESKTOP - menu caché */
+@media (min-width: 1101px) {
+  .dashboard-menu-btn,
+  .dashboard-close-btn {
+    display: none !important;
+  }
+
+  .sidebar-drawer {
+    position: relative;
+    left: 0 !important;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+}
+
+
+
+/* Fix débordement select multiple */
+.dashboard-field select[multiple] {
+  min-height: 90px;
+  max-height: 160px;
+  overflow-y: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Fix admin-section-head qui empile verticalement */
+.admin-section-head {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* Fix dashboard-panel-wide qui laisse des enfants déborder */
+.dashboard-panel-wide > * {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }

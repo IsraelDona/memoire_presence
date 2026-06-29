@@ -6,5 +6,4 @@ function ChefServiceDashboard() {
 
   return <Dashboard user={user} />;
 }
-
 export default ChefServiceDashboard;

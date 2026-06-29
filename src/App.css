@@ -3735,28 +3735,14 @@ a {
   gap: 16px;
 }
 
-.analyse-card {
-  background: #fff;
-  border-radius: 14px;
-  padding: 18px;
-  border: 1px solid #d4ddc8;
-  box-shadow: 0 8px 16px rgba(18, 34, 56, 0.06);
-  transition: all 0.2s ease;
-}
+
 
 .analyse-card:hover {
   border-color: #2d6b47;
   box-shadow: 0 12px 24px rgba(26, 58, 42, 0.12);
 }
 
-.analyse-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f5f6f0;
-}
+
 
 .analyse-header strong {
   color: #1a3a2a;
@@ -3768,12 +3754,7 @@ a {
   color: #8d95a1;
 }
 
-.analyse-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
+
 
 .analyse-item {
   background: #f5f6f0;

@@ -67,7 +67,7 @@ function PresenceMap({ userPosition, rayonKm = 1 }) {
                     <Popup>
                         <strong>Ministère de l'Économie et des Finances</strong>
                         <br />
-                        Zone autorisée : {rayonKm} km
+                        Rayon autorisée autour : {rayonKm} km
                     </Popup>
                 </Marker>
 

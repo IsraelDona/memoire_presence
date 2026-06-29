@@ -17,6 +17,8 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
+import { fetchServices } from '../../services/authService';
+import PdfDashboard from '../../components/pdf/PdfDashboard';
 
 
 const INITIAL_CHEF_FORM = {
@@ -26,6 +28,7 @@ const INITIAL_CHEF_FORM = {
   telephone: '',
   motDePasse: '',
   confirmMotDePasse: '',
+  serviceId: '',
 };
 
 const ADMIN_ITEMS = [
@@ -33,6 +36,7 @@ const ADMIN_ITEMS = [
   { key: 'requests', label: 'Demandes comptes', icon: 'check' },
   { key: 'create', label: 'Créer chef service', icon: 'document' },
   { key: 'logs', label: 'Journaux système', icon: 'report' },
+  { key: 'pdf', label: 'Rapports PDF', icon: 'document' },
   { key: 'parametres', label: 'Paramètres', icon: 'settings' },
 ];
 
@@ -67,6 +71,7 @@ function AdminDashboard() {
   const [requestsFeedback, setRequestsFeedback] = useState(null);
   const [chefFeedback, setChefFeedback] = useState(null);
   const [stats, setStats] = useState(null);
+  const [services, setServices] = useState([]);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -86,32 +91,32 @@ function AdminDashboard() {
   const [profilFeedback, setProfilFeedback] = useState(null);
   const [isUpdatingProfil, setIsUpdatingProfil] = useState(false);
 
-const [gpsConfig, setGpsConfig] = useState({
-  latitude: '',
-  longitude: '',
-  rayonKm: '',
-  nomLieu: '',
-  nombrePointagesParJour: 1,
-  modeTestSansZone: false,
-});
-const [gpsFeedback, setGpsFeedback] = useState(null);
-const [isUpdatingGps, setIsUpdatingGps] = useState(false);
+  const [gpsConfig, setGpsConfig] = useState({
+    latitude: '',
+    longitude: '',
+    rayonKm: '',
+    nomLieu: '',
+    nombrePointagesParJour: 1,
+    modeTestSansZone: false,
+  });
+  const [gpsFeedback, setGpsFeedback] = useState(null);
+  const [isUpdatingGps, setIsUpdatingGps] = useState(false);
 
-const [localToast, setLocalToast] = useState(null);
+  const [localToast, setLocalToast] = useState(null);
 
-const showLocalToast = ({ type, message }) => {
-  setLocalToast({ type, message, id: Date.now() });
-  setTimeout(() => setLocalToast(null), 5000);
-};
+  const showLocalToast = ({ type, message }) => {
+    setLocalToast({ type, message, id: Date.now() });
+    setTimeout(() => setLocalToast(null), 5000);
+  };
 
-const notifierAction = (setFeedbackFn, type, message) => {
-  setFeedbackFn({ type, message });
+  const notifierAction = (setFeedbackFn, type, message) => {
+    setFeedbackFn({ type, message });
 
-  setTimeout(() => {
-    setFeedbackFn(null);
-    showLocalToast({ type, message });
-  }, 2500);
-};
+    setTimeout(() => {
+      setFeedbackFn(null);
+      showLocalToast({ type, message });
+    }, 2500);
+  };
 
   const loadDemandes = useCallback(async ({ showError = false, silent = false } = {}) => {
     if (!silent) {
@@ -156,6 +161,7 @@ const notifierAction = (setFeedbackFn, type, message) => {
   useEffect(() => {
     loadDemandes({ silent: true });
     chargerStatistiques();
+    fetchServices().then(setServices);
   }, [loadDemandes, chargerStatistiques]);
 
   useEffect(() => {
@@ -187,96 +193,96 @@ const notifierAction = (setFeedbackFn, type, message) => {
 
 
 
-const handleProfilSubmit = async (event) => {
-  event.preventDefault();
-  setProfilFeedback(null);
-  setIsUpdatingProfil(true);
+  const handleProfilSubmit = async (event) => {
+    event.preventDefault();
+    setProfilFeedback(null);
+    setIsUpdatingProfil(true);
 
-  try {
-    const result = await updateMonProfil({
-      nom: profilForm.nom.trim() || undefined,
-      prenom: profilForm.prenom.trim() || undefined,
-      email: profilForm.email.trim() || undefined,
-      motDePasse: profilForm.motDePasse || undefined,
-    });
+    try {
+      const result = await updateMonProfil({
+        nom: profilForm.nom.trim() || undefined,
+        prenom: profilForm.prenom.trim() || undefined,
+        email: profilForm.email.trim() || undefined,
+        motDePasse: profilForm.motDePasse || undefined,
+      });
 
-    updateUser({
-      nom: profilForm.nom.trim() || user.nom,
-      prenom: profilForm.prenom.trim() || user.prenom,
-      email: profilForm.email.trim() || user.email
-    });
+      updateUser({
+        nom: profilForm.nom.trim() || user.nom,
+        prenom: profilForm.prenom.trim() || user.prenom,
+        email: profilForm.email.trim() || user.email
+      });
 
-    setProfilForm({ nom: '', prenom: '', email: '', motDePasse: '' });
+      setProfilForm({ nom: '', prenom: '', email: '', motDePasse: '' });
 
-    notifierAction(
-      setProfilFeedback,
-      'success',
-      typeof result === 'string' ? result : 'Profil mis à jour avec succès.'
-    );
+      notifierAction(
+        setProfilFeedback,
+        'success',
+        typeof result === 'string' ? result : 'Profil mis à jour avec succès.'
+      );
 
-  } catch (error) {
-    notifierAction(
-      setProfilFeedback,
-      'error',
-      error?.message || 'Impossible de mettre à jour le profil.'
-    );
-  } finally {
-    setIsUpdatingProfil(false);
-  }
-};
-const handleGpsSubmit = async (event) => {
-  event.preventDefault();
-  setGpsFeedback(null);
-  setIsUpdatingGps(true);
+    } catch (error) {
+      notifierAction(
+        setProfilFeedback,
+        'error',
+        error?.message || 'Impossible de mettre à jour le profil.'
+      );
+    } finally {
+      setIsUpdatingProfil(false);
+    }
+  };
+  const handleGpsSubmit = async (event) => {
+    event.preventDefault();
+    setGpsFeedback(null);
+    setIsUpdatingGps(true);
 
-  try {
-    const payload = {
-      latitude: parseFloat(gpsConfig.latitude),
-      longitude: parseFloat(gpsConfig.longitude),
-      rayonKm: parseFloat(gpsConfig.rayonKm),
-      nombrePointagesParJour: Number(gpsConfig.nombrePointagesParJour),
-      modeTestSansZone: gpsConfig.modeTestSansZone,
-    };
+    try {
+      const payload = {
+        latitude: parseFloat(gpsConfig.latitude),
+        longitude: parseFloat(gpsConfig.longitude),
+        rayonKm: parseFloat(gpsConfig.rayonKm),
+        nombrePointagesParJour: Number(gpsConfig.nombrePointagesParJour),
+        modeTestSansZone: gpsConfig.modeTestSansZone,
+      };
 
-    const response = await updateZoneGps(payload);
+      const response = await updateZoneGps(payload);
 
-    setGpsConfig((current) => ({
-      ...current,
-      nomLieu: response?.nomLieu || current.nomLieu,
-    }));
+      setGpsConfig((current) => ({
+        ...current,
+        nomLieu: response?.nomLieu || current.nomLieu,
+      }));
 
-    notifierAction(setGpsFeedback, 'success', 'Paramètres de pointage mis à jour avec succès.');
-  } catch (error) {
-    notifierAction(
-      setGpsFeedback,
-      'error',
-      error?.message || 'Impossible de mettre à jour les paramètres.'
-    );
-  } finally {
-    setIsUpdatingGps(false);
-  }
-};
+      notifierAction(setGpsFeedback, 'success', 'Paramètres de pointage mis à jour avec succès.');
+    } catch (error) {
+      notifierAction(
+        setGpsFeedback,
+        'error',
+        error?.message || 'Impossible de mettre à jour les paramètres.'
+      );
+    } finally {
+      setIsUpdatingGps(false);
+    }
+  };
 
-const handleDecision = async (utilisateurId, accepter) => {
-  setBusyAction({ utilisateurId, accepter });
-  setRequestsFeedback(null);
+  const handleDecision = async (utilisateurId, accepter) => {
+    setBusyAction({ utilisateurId, accepter });
+    setRequestsFeedback(null);
 
-  try {
-    const result = await traiterDemandeCompte({ utilisateurId, accepter });
+    try {
+      const result = await traiterDemandeCompte({ utilisateurId, accepter });
 
-    notifierAction(setRequestsFeedback, 'success', result.message);
+      notifierAction(setRequestsFeedback, 'success', result.message);
 
-    await loadDemandes({ silent: true });
-  } catch (error) {
-    notifierAction(
-      setRequestsFeedback,
-      'error',
-      error?.message || 'Impossible de traiter la demande.'
-    );
-  } finally {
-    setBusyAction(null);
-  }
-};
+      await loadDemandes({ silent: true });
+    } catch (error) {
+      notifierAction(
+        setRequestsFeedback,
+        'error',
+        error?.message || 'Impossible de traiter la demande.'
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   const handleChefChange = (event) => {
     const { name, value } = event.target;
@@ -290,42 +296,43 @@ const handleDecision = async (utilisateurId, accepter) => {
     setChefForm(INITIAL_CHEF_FORM);
   };
 
-const handleChefSubmit = async (event) => {
-  event.preventDefault();
-  setChefFeedback(null);
+  const handleChefSubmit = async (event) => {
+    event.preventDefault();
+    setChefFeedback(null);
 
-  if (chefForm.motDePasse !== chefForm.confirmMotDePasse) {
-    notifierAction(
-      setChefFeedback,
-      'error',
-      'Les mots de passe du chef service ne correspondent pas.'
-    );
-    return;
-  }
+    if (chefForm.motDePasse !== chefForm.confirmMotDePasse) {
+      notifierAction(
+        setChefFeedback,
+        'error',
+        'Les mots de passe du chef service ne correspondent pas.'
+      );
+      return;
+    }
 
-  setIsCreatingChef(true);
+    setIsCreatingChef(true);
 
-  try {
-    const result = await creerChefService({
-      nom: chefForm.nom.trim(),
-      prenom: chefForm.prenom.trim(),
-      email: chefForm.email.trim(),
-      telephone: chefForm.telephone.trim(),
-      motDePasse: chefForm.motDePasse,
-    });
+    try {
+      const result = await creerChefService({
+        nom: chefForm.nom.trim(),
+        prenom: chefForm.prenom.trim(),
+        email: chefForm.email.trim(),
+        telephone: chefForm.telephone.trim(),
+        motDePasse: chefForm.motDePasse,
+        serviceId: chefForm.serviceId || undefined,
+      });
 
-    notifierAction(setChefFeedback, 'success', result.message);
-    resetChefForm();
-  } catch (error) {
-    notifierAction(
-      setChefFeedback,
-      'error',
-      error?.message || 'Impossible de créer le chef service.'
-    );
-  } finally {
-    setIsCreatingChef(false);
-  }
-};
+      notifierAction(setChefFeedback, 'success', result.message);
+      resetChefForm();
+    } catch (error) {
+      notifierAction(
+        setChefFeedback,
+        'error',
+        error?.message || 'Impossible de créer le chef service.'
+      );
+    } finally {
+      setIsCreatingChef(false);
+    }
+  };
 
   const renderDemandesTable = () => {
     if (isLoadingDemandes) {
@@ -653,6 +660,22 @@ const handleChefSubmit = async (event) => {
           />
         </label>
 
+        <label className="field-input-wrap field-input-wrap-plain">
+          <select
+            name="serviceId"
+            value={chefForm.serviceId}
+            onChange={handleChefChange}
+            required
+          >
+            <option value="">Sélectionnez le service à diriger</option>
+            {services.map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.nom}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div className="auth-grid-two">
           <label className="field-input-wrap">
             <input
@@ -938,36 +961,40 @@ const handleChefSubmit = async (event) => {
       return renderParametresPanel();
     }
 
+    if (activePage === 'pdf') {
+      return <PdfDashboard />;
+    }
+
     return renderOverview();
   };
 
 
   return (
 
- <div className="dashboard-page dashboard-page-clean admin-dashboard-page">
-  <NotificationToast toast={notificationToast} onDismiss={dismissToast} />
+    <div className="dashboard-page dashboard-page-clean admin-dashboard-page">
+      <NotificationToast toast={notificationToast} onDismiss={dismissToast} />
 
-  {localToast && (
-    <div
-      className="notification-toast"
-      role="status"
-      style={{
-        background: localToast.type === 'error' ? '#b13030' : '#1a3a2a',
-        top: notificationToast ? '80px' : '20px',
-      }}
-    >
-      <span className="notification-toast-icon">
-        {localToast.type === 'error' ? '⚠️' : '✅'}
-      </span>
-      <span className="notification-toast-text">{localToast.message}</span>
-      <button type="button" className="notification-toast-close" onClick={() => setLocalToast(null)}>
-        ✕
-      </button>
-    </div>
-  )}
+      {localToast && (
+        <div
+          className="notification-toast"
+          role="status"
+          style={{
+            background: localToast.type === 'error' ? '#b13030' : '#1a3a2a',
+            top: notificationToast ? '80px' : '20px',
+          }}
+        >
+          <span className="notification-toast-icon">
+            {localToast.type === 'error' ? '⚠️' : '✅'}
+          </span>
+          <span className="notification-toast-text">{localToast.message}</span>
+          <button type="button" className="notification-toast-close" onClick={() => setLocalToast(null)}>
+            ✕
+          </button>
+        </div>
+      )}
 
-  <Sidebar role="ADMIN" activePage={activePage} onChangePage={setActivePage} items={ADMIN_ITEMS} user={user}
-    onLogout={logout} />
+      <Sidebar role="ADMIN" activePage={activePage} onChangePage={setActivePage} items={ADMIN_ITEMS} user={user}
+        onLogout={logout} />
 
       <main className="dashboard-main dashboard-main-clean">
         <div className="dashboard-head">

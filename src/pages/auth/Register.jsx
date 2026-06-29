@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-
+import { fetchServices } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
 
 function UserIcon() {
@@ -51,10 +51,13 @@ function Register() {
     telephone: '',
     motDePasse: '',
     confirmMotDePasse: '',
+    serviceId: '',
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(location.state?.message ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [services, setServices] = useState([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -67,6 +70,12 @@ function Register() {
       navigate(role, { replace: true });
     }
   }, [isAuthenticated, navigate, user?.role]);
+
+  useEffect(() => {
+    fetchServices()
+      .then((data) => setServices(data || []))
+      .finally(() => setIsLoadingServices(false));
+  }, []);
 
   useEffect(() => {
     if (location.state?.message) {
@@ -107,6 +116,7 @@ function Register() {
         email: form.email.trim(),
         telephone: form.telephone.trim(),
         motDePasse: form.motDePasse,
+        serviceId: form.serviceId || undefined,
       });
 
       const message = response?.message || 'Compte créé. En attente de validation admin.';
@@ -130,89 +140,108 @@ function Register() {
   };
 
   return (
-  <div className="auth-dgb-page">
-    <div className="auth-dgb-left">
-      <div className="auth-dgb-brand">
-        <span className="auth-dgb-mark">DGB</span>
-        <span className="auth-dgb-sub">e-presence</span>
-      </div>
-      <h1>Rejoindre la plateforme DGB</h1>
-      <p>Soumettez votre demande. Votre compte sera activé après validation par l'administrateur.</p>
-      <div className="auth-dgb-pills">
-        <span>✅ Validation admin</span>
-        <span>🔒 Compte sécurisé</span>
-        <span>📧 Notification mail</span>
-      </div>
-    </div>
-
-    <div className="auth-dgb-right">
-      <div className="auth-dgb-card">
-        <div className="auth-dgb-card-head">
-          <h2>Demande d'inscription</h2>
-          <p>Informations professionnelles de l'agent</p>
+    <div className="auth-dgb-page">
+      <div className="auth-dgb-left">
+        <div className="auth-dgb-brand">
+          <span className="auth-dgb-mark">DGB</span>
+          <span className="auth-dgb-sub">e-presence</span>
         </div>
+        <h1>Rejoindre la plateforme DGB</h1>
+        <p>Soumettez votre demande. Votre compte sera activé après validation par l'administrateur.</p>
+        <div className="auth-dgb-pills">
+          <span>✅ Validation admin</span>
+          <span>🔒 Compte sécurisé</span>
+          <span>📧 Notification mail</span>
+        </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="auth-dgb-form">
-          <div className="auth-grid-two">
-            <label className="field-input-wrap">
-              <span className="field-icon"><UserIcon /></span>
-              <input name="nom" type="text" value={form.nom}
-                onChange={handleChange} placeholder="Nom"
-                autoComplete="family-name" required />
-            </label>
-            <label className="field-input-wrap">
-              <span className="field-icon"><UserIcon /></span>
-              <input name="prenom" type="text" value={form.prenom}
-                onChange={handleChange} placeholder="Prénom"
-                autoComplete="given-name" required />
-            </label>
+      <div className="auth-dgb-right">
+        <div className="auth-dgb-card">
+          <div className="auth-dgb-card-head">
+            <h2>Demande d'inscription</h2>
+            <p>Informations professionnelles de l'agent</p>
           </div>
 
-          <label className="field-input-wrap">
-            <span className="field-icon"><MailIcon /></span>
-            <input name="email" type="email" value={form.email}
-              onChange={handleChange} placeholder="Email professionnel"
-              autoComplete="email" required />
-          </label>
+          <form onSubmit={handleSubmit} className="auth-dgb-form">
+            <div className="auth-grid-two">
+              <label className="field-input-wrap">
+                <span className="field-icon"><UserIcon /></span>
+                <input name="nom" type="text" value={form.nom}
+                  onChange={handleChange} placeholder="Nom"
+                  autoComplete="family-name" required />
+              </label>
+              <label className="field-input-wrap">
+                <span className="field-icon"><UserIcon /></span>
+                <input name="prenom" type="text" value={form.prenom}
+                  onChange={handleChange} placeholder="Prénom"
+                  autoComplete="given-name" required />
+              </label>
+            </div>
 
-          <label className="field-input-wrap">
-            <span className="field-icon"><PhoneIcon /></span>
-            <input name="telephone" type="tel" value={form.telephone}
-              onChange={handleChange} placeholder="Téléphone"
-              autoComplete="tel" required />
-          </label>
+            <label className="field-input-wrap">
+              <span className="field-icon"><MailIcon /></span>
+              <input name="email" type="email" value={form.email}
+                onChange={handleChange} placeholder="Email professionnel"
+                autoComplete="email" required />
+            </label>
 
-          <label className="field-input-wrap">
-            <span className="field-icon"><LockIcon /></span>
-            <input name="motDePasse" type="password" value={form.motDePasse}
-              onChange={handleChange} placeholder="Mot de passe"
-              autoComplete="new-password" required />
-          </label>
+            <label className="field-input-wrap">
+              <span className="field-icon"><PhoneIcon /></span>
+              <input name="telephone" type="tel" value={form.telephone}
+                onChange={handleChange} placeholder="Téléphone"
+                autoComplete="tel" required />
+            </label>
 
-          <label className="field-input-wrap field-input-wrap-plain">
-            <input name="confirmMotDePasse" type="password"
-              value={form.confirmMotDePasse} onChange={handleChange}
-              placeholder="Confirmer le mot de passe"
-              autoComplete="new-password" required />
-          </label>
+            <label className="field-input-wrap">
+              <span className="field-icon"><LockIcon /></span>
+              <input name="motDePasse" type="password" value={form.motDePasse}
+                onChange={handleChange} placeholder="Mot de passe"
+                autoComplete="new-password" required />
+            </label>
 
-          {error && <div className="form-error">{error}</div>}
-          {success && <div className="form-success">{success}</div>}
+            <label className="field-input-wrap field-input-wrap-plain">
+              <input name="confirmMotDePasse" type="password"
+                value={form.confirmMotDePasse} onChange={handleChange}
+                placeholder="Confirmer le mot de passe"
+                autoComplete="new-password" required />
+            </label>
 
-          <button type="submit" className="auth-dgb-submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Envoi...' : 'Soumettre la demande'}
-          </button>
-        </form>
+            <label className="field-input-wrap field-input-wrap-plain">
+              <select
+                name="serviceId"
+                value={form.serviceId}
+                onChange={handleChange}
+                required
+                disabled={isLoadingServices}
+              >
+                <option value="">
+                  {isLoadingServices ? 'Chargement des services...' : 'Sélectionnez votre service'}
+                </option>
+                {services.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.nom}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-        <div className="auth-dgb-footer">
-          <Link to="/login" className="link-muted">
-            Déjà un compte ? <strong>Se connecter</strong>
-          </Link>
+            {error && <div className="form-error">{error}</div>}
+            {success && <div className="form-success">{success}</div>}
+
+            <button type="submit" className="auth-dgb-submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Envoi...' : 'Soumettre la demande'}
+            </button>
+          </form>
+
+          <div className="auth-dgb-footer">
+            <Link to="/login" className="link-muted">
+              Déjà un compte ? <strong>Se connecter</strong>
+            </Link>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
 }
 
 export default Register;

@@ -161,7 +161,9 @@ async function registerAgent(payload) {
     email: payload.email,
     telephone: payload.telephone,
     motDePasse: payload.motDePasse,
+    serviceId: payload.serviceId,
   };
+
 
   try {
     const response = await api.post('/api/auth/register', body);
@@ -179,6 +181,14 @@ async function registerAgent(payload) {
     throw new Error(message);
   }
 }
+async function fetchServices() {
+  try {
+    const response = await api.get('/api/services');
+    return response.data;
+  } catch {
+    return [];
+  }
+}
 
 export {
   clearStoredSession,
@@ -188,4 +198,5 @@ export {
   login,
   normalizeRole,
   registerAgent,
+  fetchServices,
 };

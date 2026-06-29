@@ -13,6 +13,9 @@ import {
   fetchChefReunions,
   fetchEquipePresences,
   fetchJustificatifsChef,
+  fetchAgentsDuService,
+  validerJustificatif,      // ✅ AJOUTÉ
+  refuserJustificatif       // ✅ AJOUTÉ
 } from '../services/chefService';
 import { fetchMesPresences, marquerPresence } from '../services/presenceService';
 import { genererAnalyseIA, fetchMesAnalysesIA } from '../services/analyseIAService';
@@ -28,6 +31,7 @@ import PhotoUploadInput from '../components/profil/PhotoUploadInput';
 import useNotificationsPolling from '../hooks/useNotificationsPolling';
 import NotificationToast from '../components/notifications/NotificationToast';
 import { reverseGeocode } from '../services/gpsService';
+
 
 const ROLE_CONTENT = {
   CHEF_SERVICE: {
@@ -250,6 +254,7 @@ function Dashboard({ user }) {
   const [chefPresencesFeedback, setChefPresencesFeedback] = useState(null);
   const [chefMissions, setChefMissions] = useState([]);
   const [chefReunions, setChefReunions] = useState([]);
+  const [agentsDuService, setAgentsDuService] = useState([]);
   const [isLoadingChefOperations, setIsLoadingChefOperations] = useState(false);
   const [chefOperationsFeedback, setChefOperationsFeedback] = useState(null);
   const [isSubmittingMission, setIsSubmittingMission] = useState(false);
@@ -257,14 +262,16 @@ function Dashboard({ user }) {
   const [missionForm, setMissionForm] = useState({
     titre: '',
     description: '',
-    agentAssigne: '',
+    participantIds: [],
     echeance: '',
+    lieu: '', // <--- Ajoute ça ici
   });
   const [reunionForm, setReunionForm] = useState({
     titre: '',
     ordreDuJour: '',
     lieu: '',
     dateReunion: '',
+    participantIds: [],
   });
   const [chefJustificatifs, setChefJustificatifs] = useState([]);
   const [isLoadingChefJustificatifs, setIsLoadingChefJustificatifs] = useState(false);
@@ -494,13 +501,15 @@ function Dashboard({ user }) {
     }
 
     try {
-      const [missionsResponse, reunionsResponse] = await Promise.all([
+      const [missionsResponse, reunionsResponse, agentsResponse] = await Promise.all([
         fetchChefMissions(),
         fetchChefReunions(),
+        fetchAgentsDuService(),
       ]);
 
       setChefMissions(missionsResponse.missions);
       setChefReunions(reunionsResponse.reunions);
+      setAgentsDuService(agentsResponse || []);
       setChefOperationsFeedback(null);
     } catch (error) {
       setChefMissions([]);
@@ -740,8 +749,9 @@ function Dashboard({ user }) {
       setMissionForm({
         titre: '',
         description: '',
-        agentAssigne: '',
+        participantIds: [],
         echeance: '',
+        lieu: '', // <--- Ajoute ça ici aussi pour vider le champ
       });
       await loadChefOperations({ silent: true });
     } catch (error) {
@@ -770,6 +780,7 @@ function Dashboard({ user }) {
         ordreDuJour: '',
         lieu: '',
         dateReunion: '',
+        participantIds: [],
       });
       await loadChefOperations({ silent: true });
     } catch (error) {
@@ -835,11 +846,10 @@ function Dashboard({ user }) {
 
   const renderAgentOverview = () => (
     <>
-
       <section className="dashboard-hero-card-agent-hero-card">
         <div className="dashboard-hero-copy">
           <span className="dashboard-status-pill">{roleContent.subtitle}</span>
-          <h1>Bienvenue, {user?.prenom || user?.nom || 'utilisateur'}.</h1>
+          <h1>Bienvenue, {user?.role ||'role' } {user?.prenom || user?.nom ||'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
 
@@ -851,12 +861,10 @@ function Dashboard({ user }) {
 
   const renderChefOverview = () => (
     <>
-
-
       <section className="dashboard-hero-card agent-hero-card">
         <div className="dashboard-hero-copy">
           <span className="dashboard-status-pill">{roleContent.subtitle}</span>
-          <h1>Bienvenue, {user?.prenom || user?.nom || 'utilisateur'}.</h1>
+          <h1>Bienvenue,{user?.role ||'role' } {user?.prenom || user?.nom || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
       </section>
@@ -870,7 +878,7 @@ function Dashboard({ user }) {
         <div>
           <h2>Marquer présence</h2>
           <p className="panel-note">
-            La caméra vérifie d’abord ton visage. Ensuite le navigateur capture la position GPS et le backend
+            La caméra vérifie d’abord ton visage. Ensuite le système capture ta position GPS et
             valide la zone autorisée autour du Ministère.
           </p>
         </div>
@@ -883,90 +891,90 @@ function Dashboard({ user }) {
         </div>
       )}
 
-        <div className="agent-pointage-grid">
-          <article className="dashboard-placeholder gps-map-card">
-            <div className="gps-map-head">
-              <div>
-                <strong>Carte GPS — Bénin</strong>
-                <span>
-                  {MINISTRY_ZONE.label} · périmètre autorisé{' '}
-                  {MINISTRY_ZONE.radiusKm.toFixed(0)} km
-                </span>
-              </div>
-              <span className={`presence-status-badge ${currentPosition ? 'is-present' : 'is-gps'
-                }`}>
-                {currentPosition ? 'Position capturée' : 'En attente'}
+      <div className="agent-pointage-grid">
+        <article className="dashboard-placeholder gps-map-card">
+          <div className="gps-map-head">
+            <div>
+              <strong>Carte GPS — Bénin</strong>
+              <span>
+                {MINISTRY_ZONE.label} · périmètre autorisé{' '}
+                {MINISTRY_ZONE.radiusKm.toFixed(0)} km
               </span>
             </div>
-
-            <PresenceMap
-              userPosition={currentPosition}
-              rayonKm={MINISTRY_ZONE.radiusKm}
-            />
-
-            <div className="gps-map-footer">
-              <div>
-                <span>Distance au lieu autorisé</span>
-                <strong>
-                  {currentPosition
-                    ? `${calculateDistanceKm(currentPosition, MINISTRY_ZONE).toFixed(2)} km`
-                    : 'En attente'}
-                </strong>
-              </div>
-              <div>
-                <span>Lieu détecté</span>
-                <strong style={{ color: '#2d6b47', fontSize: '0.85rem' }}>
-                  {nomLieuAgent
-                    ? `📍 ${nomLieuAgent}`
-                    : currentPosition
-                      ? 'Résolution du lieu...'
-                      : '—'}
-                </strong>
-              </div>
-            </div>
-          </article>
-          <div className="agent-pointage-outer">
-            <button
-              type="button"
-              className="agent-pointage-orb"
-              onClick={openFaceVerificationBeforePointage}
-              disabled={isSubmittingPointage}
-            >
-              <span className="agent-pointage-orb-icon">
-                <FingerprintIcon />
-                <MapPinIcon />
-              </span>
-              <strong>{isSubmittingPointage ? 'Pointage en cours...' : 'Vérifier puis pointer'}</strong>
-              <span>Visage + GPS · zone autorisée par le backend</span>
-            </button>
-
-            <div className="agent-pointage-statusline">
-              <span className={`presence-status-badge ${getPresenceBadgeClass(latestPresence?.statutPresence)}`}>
-                {latestPresence ? formatPresenceStatus(latestPresence.statutPresence) : 'Non pointé'}
-              </span>
-              <p>Le pointage passe d’abord par la vérification faciale, puis envoie latitude et longitude au backend.</p>
-            </div>
+            <span className={`presence-status-badge ${currentPosition ? 'is-present' : 'is-gps'
+              }`}>
+              {currentPosition ? 'Position capturée' : 'En attente'}
+            </span>
           </div>
 
-        </div>
+          <PresenceMap
+            userPosition={currentPosition}
+            rayonKm={MINISTRY_ZONE.radiusKm}
+          />
 
+          <div className="gps-map-footer">
+            <div>
+              <span>Distance au lieu autorisé</span>
+              <strong>
+                {currentPosition
+                  ? `${calculateDistanceKm(currentPosition, MINISTRY_ZONE).toFixed(2)} km`
+                  : 'En attente'}
+              </strong>
+            </div>
+            <div>
+              <span>Lieu détecté</span>
+              <strong style={{ color: '#2d6b47', fontSize: '0.85rem' }}>
+                {nomLieuAgent
+                  ? `📍 ${nomLieuAgent}`
+                  : currentPosition
+                    ? 'Résolution du lieu...'
+                    : '—'}
+              </strong>
+            </div>
+          </div>
+        </article>
+        <div className="agent-pointage-outer">
+          <button
+            type="button"
+            className="agent-pointage-orb"
+            onClick={openFaceVerificationBeforePointage}
+            disabled={isSubmittingPointage}
+          >
+            <span className="agent-pointage-orb-icon">
+              <FingerprintIcon />
+              <MapPinIcon />
+            </span>
+            <strong>{isSubmittingPointage ? 'Pointage en cours...' : 'Vérifier puis pointer'}</strong>
+            <span>Visage + GPS · zone autorisée pour le pointage .</span>
+          </button>
 
-
-        <div className="admin-form-grid agent-pointage-form">
-          <label className="field-input-wrap field-input-wrap-plain">
-            <select value={pointageType} onChange={(event) => setPointageType(event.target.value)}>
-              <option value="BUREAU">Bureau</option>
-              <option value="MISSION">Mission</option>
-              <option value="REUNION">Réunion</option>
-            </select>
-          </label>
-
-          <div className="admin-form-actions">
-            <button type="button" className="secondary-button" onClick={goToHistory}>
-              Voir l’historique
-            </button>
+          <div className="agent-pointage-statusline">
+            <span className={`presence-status-badge ${getPresenceBadgeClass(latestPresence?.statutPresence)}`}>
+              {latestPresence ? formatPresenceStatus(latestPresence.statutPresence) : 'Non pointé'}
+            </span>
+            <p>Le pointage passe d’abord par la vérification faciale.</p>
           </div>
         </div>
+
+      </div>
+
+
+
+      <div className="admin-form-grid agent-pointage-form">
+        <label className="field-input-wrap field-input-wrap-plain">
+          <select value={pointageType} onChange={(event) => setPointageType(event.target.value)}>
+            <option value="BUREAU">Bureau</option>
+            <option value="MISSION">Mission</option>
+            <option value="REUNION">Réunion</option>
+          </select>
+        </label>
+
+        <div className="admin-form-actions">
+          <button type="button" className="secondary-button" onClick={goToHistory}>
+            Voir l’historique
+          </button>
+        </div>
+      </div>
     </section>
   );
 
@@ -1223,7 +1231,6 @@ function Dashboard({ user }) {
             Suivi des pointages de l’équipe. Cette vue consolide la lecture du service et les décisions du chef.
           </p>
         </div>
-        <span className="dashboard-status-pill">Suivi d’équipe</span>
       </div>
 
       {chefPresencesFeedback && chefPresencesFeedback.type === 'error' && (
@@ -1232,21 +1239,22 @@ function Dashboard({ user }) {
 
       <div className="chef-team-grid">
         <article className="dashboard-stat-card chef-metric-card">
-          <span>Agents suivis</span>
-          <strong>{chefPresences.length}</strong>
-          <p>Comptes agents renvoyés par le backend pour la supervision du service.</p>
+          <span>Agents du service</span>
+          <strong>{agentsDuService.filter(p => (p.utilisateur?.email || p.email) !== user?.email).length}</strong>
+          
+          <p>Nombre total d'agents rattachés à votre service.</p>
         </article>
 
         <article className="dashboard-stat-card chef-metric-card">
           <span>Présences du jour</span>
           <strong>{chefPresences.length ? 'Chargées' : 'À charger'}</strong>
-          <p>Pointages, retards et absences de l’équipe, regroupés pour une lecture rapide du service.</p>
+          <p>Pointages, retards et absences de l’équipe.</p>
         </article>
 
         <article className="dashboard-stat-card chef-metric-card">
           <span>Dernière synchronisation</span>
           <strong>{chefPresences.length ? 'OK' : 'Backend'}</strong>
-          <p>La vue est prête pour les retours API sans perdre la structure actuelle.</p>
+          <p>La Mise à jour du système est automatique</p>
         </article>
       </div>
 
@@ -1276,40 +1284,46 @@ function Dashboard({ user }) {
               </tr>
             </thead>
             <tbody>
-              {chefPresences.map((item, index) => {
-                const person = item.utilisateur || item.agent || item.user || item;
-                const name = [person?.nom, person?.prenom].filter(Boolean).join(' ').trim() || person?.email || `Agent ${index + 1}`;
-                const pointage = item.heurePointage || item.datePointage || item.datePresence || item.createdAt;
-                const latitude = Number(item.latitude ?? item.lat);
-                const longitude = Number(item.longitude ?? item.lng ?? item.lon);
-                const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+              {chefPresences
+                // 👇 AJOUT DE CE FILTRE : Exclut la ligne si l'email de l'agent correspond à celui du chef connecté
+                .filter((item) => {
+                  const person = item.utilisateur || item.agent || item.user || item;
+                  return person?.email !== user?.email;
+                })
+                .map((item, index) => {
+                  const person = item.utilisateur || item.agent || item.user || item;
+                  const name = [person?.nom, person?.prenom].filter(Boolean).join(' ').trim() || person?.email || `Agent ${index + 1}`;
+                  const pointage = item.heurePointage || item.datePointage || item.datePresence || item.createdAt;
+                  const latitude = Number(item.latitude ?? item.lat);
+                  const longitude = Number(item.longitude ?? item.lng ?? item.lon);
+                  const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
 
-                return (
-                  <tr key={item.id ?? `${name}-${pointage}-${index}`}>
-                    <td>
-                      <strong>{name}</strong>
-                      <div className="table-subnote">{person?.email || 'Compte rattaché au service'}</div>
-                    </td>
-                    <td>{formatDateTime(pointage)}</td>
-                    <td>
-                      <span className={`presence-status-badge ${getPresenceBadgeClass(item.statutPresence)}`}>
-                        {formatPresenceStatus(item.statutPresence)}
-                      </span>
-                    </td>
-                    <td>{formatPresenceType(item.typePresence)}</td>
-                    <td>
-                      <strong>
-                        {item.nomLieu
-                          ? `📍 ${item.nomLieu}`
-                          : hasCoordinates
-                            ? 'Résolution du lieu...'
-                            : '—'}
-                      </strong>
-                      <div className="table-subnote">Suivi de zone pour le chef de service.</div>
-                    </td>
-                  </tr>
-                );
-              })}
+                  return (
+                    <tr key={item.id ?? `${name}-${pointage}-${index}`}>
+                      <td>
+                        <strong>{name}</strong>
+                        <div className="table-subnote">{person?.email || 'Compte rattaché au service'}</div>
+                      </td>
+                      <td>{formatDateTime(pointage)}</td>
+                      <td>
+                        <span className={`presence-status-badge ${getPresenceBadgeClass(item.statutPresence)}`}>
+                          {formatPresenceStatus(item.statutPresence)}
+                        </span>
+                      </td>
+                      <td>{formatPresenceType(item.typePresence)}</td>
+                      <td>
+                        <strong>
+                          {item.nomLieu
+                            ? `📍 ${item.nomLieu}`
+                            : hasCoordinates
+                              ? 'Résolution du lieu...'
+                              : '—'}
+                        </strong>
+                        <div className="table-subnote">Suivi de zone pour le chef de service.</div>
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
@@ -1323,7 +1337,7 @@ function Dashboard({ user }) {
         <div>
           <h2>Missions & réunions</h2>
           <p className="panel-note">
-            Une seule vue métier pour préparer les affectations, organiser les convocations et garder le service lisible.
+            Formulaires de création et d'affectation pour le service. Les agents concernés recevront instantanément une notification.
           </p>
         </div>
         <span className="dashboard-status-pill">Organisation</span>
@@ -1338,53 +1352,14 @@ function Dashboard({ user }) {
       )}
 
       <div className="chef-operations-grid">
+        {/* COLONNE MISSION */}
         <article className="dashboard-placeholder dashboard-placeholder-muted chef-operation-column">
           <div className="chef-operation-head">
             <div>
-              <strong>Missions du service</strong>
-              <div className="table-subnote">Attributions, agents concernés, échéances et état d’exécution.</div>
+              <strong>Nouvelle Mission</strong>
+              <div className="table-subnote">Attribuer des objectifs et une échéance à vos agents.</div>
             </div>
-            <span className="presence-status-badge is-present">{chefMissions.length} mission(s)</span>
           </div>
-
-          {isLoadingChefOperations ? (
-            <div className="dashboard-placeholder">
-              <strong>Chargement des missions</strong>
-              <span>Récupération des données métier du chef en cours...</span>
-            </div>
-          ) : chefMissions.length === 0 ? (
-            <div className="dashboard-placeholder">
-              <strong>Aucune mission</strong>
-              <span>Le backend doit renvoyer les missions pour activer la vue de suivi.</span>
-            </div>
-          ) : (
-            <div className="chef-list">
-              {chefMissions.map((mission, index) => {
-                const agent = mission.agent || mission.utilisateur || mission.user;
-                const agentName =
-                  [agent?.nom, agent?.prenom].filter(Boolean).join(' ').trim() ||
-                  agent?.email ||
-                  mission.agentAssigne ||
-                  `Agent ${index + 1}`;
-                const status = mission.statut || mission.status || 'EN_COURS';
-
-                return (
-                  <article key={mission.id ?? `mission-${index}`} className="chef-list-item">
-                    <div>
-                      <strong>{mission.titre || mission.libelle || 'Mission'}</strong>
-                      <div className="table-subnote">{agentName}</div>
-                    </div>
-                    <div className="chef-list-meta">
-                      <span className={`presence-status-badge ${String(status).toUpperCase() === 'TERMINEE' ? 'is-present' : 'is-gps'}`}>
-                        {String(status).replace(/_/g, ' ')}
-                      </span>
-                      <span>{formatDateTime(mission.echeance || mission.dateEcheance || mission.createdAt)}</span>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
 
           <form className="chef-form" onSubmit={handleMissionSubmit}>
             <div className="chef-form-grid-two">
@@ -1394,26 +1369,51 @@ function Dashboard({ user }) {
                   value={missionForm.titre}
                   onChange={(event) => setMissionForm((current) => ({ ...current, titre: event.target.value }))}
                   placeholder="Titre de la mission"
+                  required
+                />
+              </label>
+
+              <label className="field-input-wrap field-input-wrap-plain">
+                <select
+                  multiple
+                  value={missionForm.participantIds}
+                  onChange={(event) => {
+                    const selected = Array.from(event.target.selectedOptions).map((opt) => opt.value);
+                    setMissionForm((current) => ({ ...current, participantIds: selected }));
+                  }}
+                  style={{ minHeight: '90px' }}
+                  required
+                >
+                  {agentsDuService.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {[agent.prenom, agent.nom].filter(Boolean).join(' ')}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="chef-form-grid-two">
+              {/* AJOUT DU CHAMP LIEU POUR LA MISSION */}
+              <label className="field-input-wrap field-input-wrap-plain">
+                <input
+                  type="text"
+                  value={missionForm.lieu || ''}
+                  onChange={(event) => setMissionForm((current) => ({ ...current, lieu: event.target.value }))}
+                  placeholder="Lieu de la mission"
+                  required
                 />
               </label>
 
               <label className="field-input-wrap field-input-wrap-plain">
                 <input
-                  type="text"
-                  value={missionForm.agentAssigne}
-                  onChange={(event) => setMissionForm((current) => ({ ...current, agentAssigne: event.target.value }))}
-                  placeholder="Agent assigné"
+                  type="datetime-local"
+                  value={missionForm.echeance}
+                  onChange={(event) => setMissionForm((current) => ({ ...current, echeance: event.target.value }))}
+                  required
                 />
               </label>
             </div>
-
-            <label className="field-input-wrap field-input-wrap-plain">
-              <input
-                type="datetime-local"
-                value={missionForm.echeance}
-                onChange={(event) => setMissionForm((current) => ({ ...current, echeance: event.target.value }))}
-              />
-            </label>
 
             <label className="chef-textarea-wrap">
               <textarea
@@ -1432,45 +1432,14 @@ function Dashboard({ user }) {
           </form>
         </article>
 
+        {/* COLONNE REUNION */}
         <article className="dashboard-placeholder dashboard-placeholder-muted chef-operation-column">
           <div className="chef-operation-head">
             <div>
-              <strong>Réunions de service</strong>
-              <div className="table-subnote">Ordre du jour, convocations, présence et suivi des décisions.</div>
+              <strong>Nouvelle Réunion de service</strong>
+              <div className="table-subnote">Planifier une convocation avec l'ordre du jour.</div>
             </div>
-            <span className="presence-status-badge is-gps">{chefReunions.length} réunion(s)</span>
           </div>
-
-          {isLoadingChefOperations ? (
-            <div className="dashboard-placeholder">
-              <strong>Chargement des réunions</strong>
-              <span>Synchronisation des réunions du service en cours...</span>
-            </div>
-          ) : chefReunions.length === 0 ? (
-            <div className="dashboard-placeholder">
-              <strong>Aucune réunion</strong>
-              <span>Le backend doit renvoyer les réunions pour activer la vue de planification.</span>
-            </div>
-          ) : (
-            <div className="chef-list">
-              {chefReunions.map((reunion, index) => (
-                <article key={reunion.id ?? `reunion-${index}`} className="chef-list-item">
-                  <div>
-                    <strong>{reunion.titre || reunion.libelle || 'Réunion'}</strong>
-                    <div className="table-subnote">
-                      {reunion.lieu || reunion.localisation || 'Lieu à préciser'}
-                    </div>
-                  </div>
-                  <div className="chef-list-meta">
-                    <span className="presence-status-badge is-present">
-                      {String(reunion.statut || reunion.status || 'PLANIFIEE').replace(/_/g, ' ')}
-                    </span>
-                    <span>{formatDateTime(reunion.dateReunion || reunion.date || reunion.createdAt)}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
 
           <form className="chef-form" onSubmit={handleReunionSubmit}>
             <label className="field-input-wrap field-input-wrap-plain">
@@ -1479,7 +1448,26 @@ function Dashboard({ user }) {
                 value={reunionForm.titre}
                 onChange={(event) => setReunionForm((current) => ({ ...current, titre: event.target.value }))}
                 placeholder="Titre de la réunion"
+                required
               />
+            </label>
+            <label className="field-input-wrap field-input-wrap-plain">
+              <select
+                multiple
+                value={reunionForm.participantIds}
+                onChange={(event) => {
+                  const selected = Array.from(event.target.selectedOptions).map((opt) => opt.value);
+                  setReunionForm((current) => ({ ...current, participantIds: selected }));
+                }}
+                style={{ minHeight: '90px' }}
+                required
+              >
+                {agentsDuService.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {[agent.prenom, agent.nom].filter(Boolean).join(' ')}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <div className="chef-form-grid-two">
@@ -1488,7 +1476,8 @@ function Dashboard({ user }) {
                   type="text"
                   value={reunionForm.lieu}
                   onChange={(event) => setReunionForm((current) => ({ ...current, lieu: event.target.value }))}
-                  placeholder="Lieu"
+                  placeholder="Lieu de la réunion"
+                  required
                 />
               </label>
 
@@ -1497,6 +1486,7 @@ function Dashboard({ user }) {
                   type="datetime-local"
                   value={reunionForm.dateReunion}
                   onChange={(event) => setReunionForm((current) => ({ ...current, dateReunion: event.target.value }))}
+                  required
                 />
               </label>
             </div>
@@ -1520,16 +1510,63 @@ function Dashboard({ user }) {
       </div>
 
       <div className="dashboard-placeholder dashboard-placeholder-muted">
-        <strong>Coordination du service</strong>
+        <strong>Confirmation d'envoi</strong>
         <span>
-          La fusion de ces deux modules allège l’interface et garde l’expérience claire pour le chef, tout en
-          préparant le branchement backend complet.
+          Dès validation du formulaire, le système lève un Toast de succès et envoie immédiatement une notification Push/Menu aux collaborateurs assignés.
         </span>
       </div>
     </section>
   );
+  // Dashboard.jsx - Ajouter après les autres handlers
 
-  const renderChefJustificatifsPanel = () => (
+// Validation d'un justificatif (Accepter)
+const handleValiderJustificatif = async (justificatifId) => {
+  try {
+    const response = await validerJustificatif(justificatifId);
+    showLocalToast({
+      type: 'success',
+      message: response.data || 'Justificatif accepté avec succès.',
+    });
+    // Recharger la liste
+    await loadChefJustificatifs({ silent: true });
+  } catch (error) {
+    showLocalToast({
+      type: 'error',
+      message: error?.response?.data || 'Impossible d\'accepter le justificatif.',
+    });
+  }
+};
+
+// Refus d'un justificatif
+const handleRefuserJustificatif = async (justificatifId) => {
+  // Demander un motif de refus (optionnel mais recommandé)
+  const motif = window.prompt('Motif du refus (optionnel) :');
+  // Si l'utilisateur annule, on ne fait rien
+  if (motif === null) return;
+
+  try {
+    const response = await refuserJustificatif(justificatifId, motif);
+    showLocalToast({
+      type: 'error',
+      message: response.data || 'Justificatif refusé.',
+    });
+    // Recharger la liste
+    await loadChefJustificatifs({ silent: true });
+  } catch (error) {
+    showLocalToast({
+      type: 'error',
+      message: error?.response?.data || 'Impossible de refuser le justificatif.',
+    });
+  }
+};
+const renderChefJustificatifsPanel = () => {
+  // Filtrer les justificatifs : exclure ceux du chef connecté
+  const justificatifsFiltres = chefJustificatifs.filter((item) => {
+    const person = item.utilisateur || item.agent || item.user || item;
+    return person?.email !== user?.email;
+  });
+
+  return (
     <section className="dashboard-panel dashboard-panel-wide">
       <div className="admin-section-head">
         <div>
@@ -1539,43 +1576,67 @@ function Dashboard({ user }) {
         <span className="dashboard-status-pill">Validation</span>
       </div>
 
-
-
       {isLoadingChefJustificatifs ? (
         <div className="dashboard-placeholder">
           <strong>Chargement des justificatifs</strong>
           <span>Récupération des demandes du service en cours...</span>
         </div>
-      ) : chefJustificatifs.length === 0 ? (
+      ) : justificatifsFiltres.length === 0 ? (
         <div className="dashboard-placeholder">
-          <strong>Traitement des justificatifs</strong>
-          <span>Le backend doit renvoyer les justificatifs du service pour activer les actions de validation.</span>
+          <strong>Aucun justificatif en attente</strong>
+          <span>Les demandes des agents apparaîtront ici dès qu'elles seront soumises.</span>
         </div>
       ) : (
         <div className="chef-justificatifs-grid">
-          {chefJustificatifs.map((item, index) => {
+          {justificatifsFiltres.map((item, index) => {
             const person = item.utilisateur || item.agent || item.user || item;
             const name = [person?.nom, person?.prenom].filter(Boolean).join(' ').trim() || person?.email || `Agent ${index + 1}`;
-            const label = item.typeJustificatif || item.type || 'Justificatif';
+            const label = item.titre || item.type || 'Justificatif';
             const status = item.statut || item.status || 'EN_ATTENTE';
-            const dateValue = item.dateJustificatif || item.dateDemande || item.createdAt;
-            const badgeClass =
-              String(status).toUpperCase() === 'ACCEPTE'
-                ? 'is-present'
-                : String(status).toUpperCase() === 'REFUSE'
-                  ? 'is-late'
-                  : 'is-gps';
+            const dateValue = item.dateCreation || item.dateSoumission || item.createdAt;
+            const isEnAttente = String(status).toUpperCase() === 'EN_ATTENTE';
+            const badgeClass = isEnAttente ? 'is-gps' : String(status).toUpperCase() === 'ACCEPTE' ? 'is-present' : 'is-late';
 
             return (
-              <article key={item.id ?? `${name}-${index}`} className="dashboard-placeholder dashboard-placeholder-muted">
-                <strong>{label}</strong>
-                <span>{name}</span>
-                <div className="table-subnote">{formatDateTime(dateValue)}</div>
-                <div className="admin-row-actions">
+              <article key={item.id ?? `${name}-${index}`} className="chef-justificatif-card">
+                <div className="chef-justificatif-header">
+                  <strong>{label}</strong>
                   <span className={`presence-status-badge ${badgeClass}`}>
-                    {String(status).replace(/_/g, ' ')}
+                    {isEnAttente ? 'En attente' : String(status).replace(/_/g, ' ')}
                   </span>
                 </div>
+                <div className="chef-justificatif-body">
+                  <span className="chef-justificatif-employe">
+                    👤 {name}
+                  </span>
+                  <span className="chef-justificatif-date">
+                    📅 {formatDateTime(dateValue)}
+                  </span>
+                  {item.description && (
+                    <p className="chef-justificatif-description">{item.description}</p>
+                  )}
+                  {item.motifRefus && (
+                    <p className="chef-justificatif-refus">❌ Motif : {item.motifRefus}</p>
+                  )}
+                </div>
+                {isEnAttente && (
+                  <div className="chef-justificatif-actions">
+                    <button
+                      type="button"
+                      className="admin-mini-button-success"
+                      onClick={() => handleValiderJustificatif(item.id)}
+                    >
+                      ✓ Accepter
+                    </button>
+                    <button
+                      type="button"
+                      className="admin-mini-button-danger"
+                      onClick={() => handleRefuserJustificatif(item.id)}
+                    >
+                      ✗ Refuser
+                    </button>
+                  </div>
+                )}
               </article>
             );
           })}
@@ -1583,6 +1644,7 @@ function Dashboard({ user }) {
       )}
     </section>
   );
+};
 
   const renderChefHistoryPanel = () =>
     renderHistoryPanel({
