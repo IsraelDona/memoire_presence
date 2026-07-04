@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { fetchServices } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
+// IMPORTATION DEPUIS NPM
+import { Eye, EyeOff } from 'lucide-react';
 
 function UserIcon() {
   return (
@@ -53,11 +55,16 @@ function Register() {
     confirmMotDePasse: '',
     serviceId: '',
   });
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(location.state?.message ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [services, setServices] = useState([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
+
+  // ÉTATS DE VISIBILITÉ
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -192,18 +199,44 @@ function Register() {
                 autoComplete="tel" required />
             </label>
 
-            <label className="field-input-wrap">
+            {/* PREMIER CHAMP MOT DE PASSE */}
+            <label className="field-input-wrap" style={{ position: 'relative' }}>
               <span className="field-icon"><LockIcon /></span>
-              <input name="motDePasse" type="password" value={form.motDePasse}
+              <input name="motDePasse" type={showPassword ? "text" : "password"} value={form.motDePasse}
                 onChange={handleChange} placeholder="Mot de passe"
-                autoComplete="new-password" required />
+                autoComplete="new-password" required style={{ paddingRight: '40px' }} />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', color: '#9ca3af', padding: 0
+                }}
+              >
+                {/* COMPOSANTS DE LA LIBRAIRIE */}
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
             </label>
 
-            <label className="field-input-wrap field-input-wrap-plain">
-              <input name="confirmMotDePasse" type="password"
+            {/* DEUXIÈME CHAMP CONFIRMATION */}
+            <label className="field-input-wrap field-input-wrap-plain" style={{ position: 'relative' }}>
+              <input name="confirmMotDePasse" type={showConfirmPassword ? "text" : "password"}
                 value={form.confirmMotDePasse} onChange={handleChange}
                 placeholder="Confirmer le mot de passe"
-                autoComplete="new-password" required />
+                autoComplete="new-password" required style={{ paddingRight: '40px' }} />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={{
+                  position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', color: '#9ca3af', padding: 0
+                }}
+              >
+                {/* COMPOSANTS DE LA LIBRAIRIE */}
+                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
             </label>
 
             <label className="field-input-wrap field-input-wrap-plain">

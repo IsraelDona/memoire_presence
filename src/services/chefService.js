@@ -105,12 +105,9 @@ export async function fetchAgentsDuService() {
 }
 // Valider un justificatif (ACCEPTE)
 export const validerJustificatif = (justificatifId) => {
-  return api.put(`/chef-service/justificatifs/${justificatifId}/accepter`);
+  return api.put(`/api/agent/justificatifs/${justificatifId}/accepter`);
 };
 
-// Refuser un justificatif (avec motif optionnel)
 export const refuserJustificatif = (justificatifId, motifRefus = '') => {
-  return api.put(`/chef-service/justificatifs/${justificatifId}/refuser`, { motifRefus });
+  return api.put(`/api/agent/justificatifs/${justificatifId}/refuser`, { motifRefus });
 };
-
-

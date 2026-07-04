@@ -64,6 +64,7 @@ async function creerChefService(payload) {
     email: payload.email,
     telephone: payload.telephone,
     motDePasse: payload.motDePasse,
+    serviceId: payload.serviceId,
   };
 
   const response = await api.post('/api/admin/creer-chef-service', body);

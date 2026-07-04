@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Sidebar from '../../components/layout/Sidebar';
 import { useAuth } from '../../context/AuthContext';
 import { normalizeRole } from '../../services/authService';
@@ -19,6 +19,12 @@ import {
 } from 'recharts';
 import { fetchServices } from '../../services/authService';
 import PdfDashboard from '../../components/pdf/PdfDashboard';
+import {
+  noterChef,
+  calculerNoteAuto,
+  getClassementChefs,
+  getClassementAgentsAdmin,
+} from '../../services/noteService';
 
 
 const INITIAL_CHEF_FORM = {
@@ -37,6 +43,7 @@ const ADMIN_ITEMS = [
   { key: 'create', label: 'Créer chef service', icon: 'document' },
   { key: 'logs', label: 'Journaux système', icon: 'report' },
   { key: 'pdf', label: 'Rapports PDF', icon: 'document' },
+  { key: 'notes', label: 'Notes & classement', icon: 'report' },
   { key: 'parametres', label: 'Paramètres', icon: 'settings' },
 ];
 
@@ -103,11 +110,29 @@ function AdminDashboard() {
   const [isUpdatingGps, setIsUpdatingGps] = useState(false);
 
   const [localToast, setLocalToast] = useState(null);
+  const localToastRef = useRef(null);
+  // États Notes mensuelles (admin)
+  const [classementChefs, setClassementChefs] = useState([]);
+  const [classementAgentsAdmin, setClassementAgentsAdmin] = useState([]);
+  const [isLoadingNotesAdmin, setIsLoadingNotesAdmin] = useState(false);
+  const [notesFeedbackAdmin, setNotesFeedbackAdmin] = useState(null);
+  const [notesMoisAdmin, setNotesMoisAdmin] = useState(new Date().getMonth() + 1);
+  const [notesAnneeAdmin, setNotesAnneeAdmin] = useState(new Date().getFullYear());
+  const [noteManuelleChefs, setNoteManuelleChefs] = useState({});
+  const [isCalculatingAdmin, setIsCalculatingAdmin] = useState({});
+  const [isNotingChef, setIsNotingChef] = useState({});
+  const [chefsList, setChefsList] = useState([]);
 
-  const showLocalToast = ({ type, message }) => {
-    setLocalToast({ type, message, id: Date.now() });
-    setTimeout(() => setLocalToast(null), 5000);
-  };
+const showLocalToast = ({ type, message }) => {
+  if (localToastRef.current) {
+    clearTimeout(localToastRef.current);
+  }
+  setLocalToast({ type, message, id: Date.now() });
+  localToastRef.current = setTimeout(() => {
+    setLocalToast(null);
+    localToastRef.current = null;
+  }, 5000);
+};
 
   const notifierAction = (setFeedbackFn, type, message) => {
     setFeedbackFn({ type, message });
@@ -159,6 +184,14 @@ function AdminDashboard() {
   }, []);
 
   useEffect(() => {
+  return () => {
+    if (localToastRef.current) {
+      clearTimeout(localToastRef.current);
+    }
+  };
+}, []);
+
+  useEffect(() => {
     loadDemandes({ silent: true });
     chargerStatistiques();
     fetchServices().then(setServices);
@@ -169,6 +202,12 @@ function AdminDashboard() {
       loadDemandes({ showError: true });
     }
   }, [activePage, loadDemandes]);
+
+  useEffect(() => {
+    if (activePage === 'notes') {
+      loadNotesAdmin();
+    }
+  }, [activePage, notesMoisAdmin, notesAnneeAdmin]);
 
   useEffect(() => {
     if (activePage === 'parametres') {
@@ -333,7 +372,59 @@ function AdminDashboard() {
       setIsCreatingChef(false);
     }
   };
+  const loadNotesAdmin = async ({ silent = false } = {}) => {
+    if (!silent) setIsLoadingNotesAdmin(true);
+    try {
+      const [chefs, agents] = await Promise.all([
+        getClassementChefs(notesMoisAdmin, notesAnneeAdmin),
+        getClassementAgentsAdmin(notesMoisAdmin, notesAnneeAdmin),
+      ]);
+      setClassementChefs(chefs);
+      setClassementAgentsAdmin(agents);
 
+      const initValues = {};
+      chefs.forEach((n) => {
+        initValues[n.utilisateur.id] = n.noteManuelle ?? '';
+      });
+      setNoteManuelleChefs(initValues);
+      setNotesFeedbackAdmin(null);
+    } catch {
+      setNotesFeedbackAdmin({ type: 'error', message: 'Impossible de charger les notes.' });
+    } finally {
+      if (!silent) setIsLoadingNotesAdmin(false);
+    }
+  };
+
+  const handleCalculerNoteChef = async (chefId) => {
+    setIsCalculatingAdmin((c) => ({ ...c, [chefId]: true }));
+    try {
+      await calculerNoteAuto(chefId, notesMoisAdmin, notesAnneeAdmin);
+      await loadNotesAdmin({ silent: true });
+      showLocalToast({ type: 'success', message: 'Note automatique calculée.' });
+    } catch {
+      showLocalToast({ type: 'error', message: 'Erreur lors du calcul.' });
+    } finally {
+      setIsCalculatingAdmin((c) => ({ ...c, [chefId]: false }));
+    }
+  };
+
+  const handleNoterChef = async (chefId) => {
+    const valeur = parseFloat(noteManuelleChefs[chefId]);
+    if (isNaN(valeur) || valeur < 0 || valeur > 20) {
+      showLocalToast({ type: 'error', message: 'La note doit être entre 0 et 20.' });
+      return;
+    }
+    setIsNotingChef((c) => ({ ...c, [chefId]: true }));
+    try {
+      await noterChef(chefId, notesMoisAdmin, notesAnneeAdmin, valeur);
+      await loadNotesAdmin({ silent: true });
+      showLocalToast({ type: 'success', message: 'Note enregistrée.' });
+    } catch {
+      showLocalToast({ type: 'error', message: 'Erreur lors de la saisie.' });
+    } finally {
+      setIsNotingChef((c) => ({ ...c, [chefId]: false }));
+    }
+  };
   const renderDemandesTable = () => {
     if (isLoadingDemandes) {
       return (
@@ -943,7 +1034,249 @@ function AdminDashboard() {
     </section>
   );
 
+  const MOIS_NOMS = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  ];
 
+  const renderClassementBlock = (liste, titre) => {
+    const triee = [...liste]
+      .filter((n) => n.scoreFinal != null)
+      .sort((a, b) => b.scoreFinal - a.scoreFinal);
+
+    if (triee.length === 0) return null;
+
+    return (
+      <div style={{ marginBottom: '24px' }}>
+        <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: '#1a1a2e' }}>
+          🏆 {titre}
+        </h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {triee.map((n, index) => {
+            const nom = [n.utilisateur?.prenom, n.utilisateur?.nom]
+              .filter(Boolean).join(' ') || '—';
+            const medals = ['🥇', '🥈', '🥉'];
+            const medal = medals[index] ?? `${index + 1}.`;
+            const pct = (n.scoreFinal / 20) * 100;
+            return (
+              <div
+                key={n.utilisateur?.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  background: index === 0 ? '#f0fdf4' : '#fafafa',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  border: index === 0 ? '1px solid #bbf7d0' : '1px solid #eee',
+                }}
+              >
+                <span style={{ fontSize: '20px', minWidth: '28px' }}>{medal}</span>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ fontSize: '13px' }}>{nom}</strong>
+                  {n.utilisateur?.service?.nom && (
+                    <div style={{ fontSize: '11px', color: '#888' }}>
+                      {n.utilisateur.service.nom}
+                    </div>
+                  )}
+                  <div style={{
+                    marginTop: '4px', height: '5px',
+                    background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      width: `${pct}%`, height: '100%',
+                      background: index === 0 ? '#16a34a' : '#1e5eff',
+                      borderRadius: '4px', transition: 'width 0.4s ease',
+                    }} />
+                  </div>
+                </div>
+                <span style={{
+                  fontWeight: 700, fontSize: '14px',
+                  color: index === 0 ? '#16a34a' : '#1a1a2e',
+                  minWidth: '48px', textAlign: 'right',
+                }}>
+                  {n.scoreFinal}/20
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderNotesAdminPanel = () => (
+    <section className="dashboard-panel dashboard-panel-wide">
+      <div className="admin-section-head">
+        <div>
+          <h2>Notes & classement global</h2>
+          <p className="panel-note">
+            Calculez et attribuez les notes aux chefs de service.
+            Consultez le classement global des chefs et de tous les agents.
+          </p>
+        </div>
+        <span className="dashboard-status-pill">Évaluation</span>
+      </div>
+
+      {/* Sélecteur mois/année */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', alignItems: 'flex-end' }}>
+        <label className="dashboard-field" style={{ margin: 0 }}>
+          <span>Mois</span>
+          <select
+            value={notesMoisAdmin}
+            onChange={(e) => setNotesMoisAdmin(Number(e.target.value))}
+          >
+            {MOIS_NOMS.map((m, i) => (
+              <option key={i + 1} value={i + 1}>{m}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="dashboard-field" style={{ margin: 0 }}>
+          <span>Année</span>
+          <select
+            value={notesAnneeAdmin}
+            onChange={(e) => setNotesAnneeAdmin(Number(e.target.value))}
+          >
+            {[2024, 2025, 2026, 2027].map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {notesFeedbackAdmin && (
+        <div className={notesFeedbackAdmin.type === 'error' ? 'form-error' : 'form-success'}>
+          {notesFeedbackAdmin.message}
+        </div>
+      )}
+
+      {isLoadingNotesAdmin ? (
+        <div className="dashboard-placeholder">
+          <strong>Chargement des notes</strong>
+          <span>Récupération des données en cours...</span>
+        </div>
+      ) : (
+        <>
+          {/* Tableau chefs */}
+          <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>
+            Évaluation des chefs de service
+          </h3>
+
+          {classementChefs.length === 0 ? (
+            <div className="dashboard-placeholder dashboard-placeholder-muted"
+              style={{ marginBottom: '24px' }}>
+              <strong>Aucune note chef pour ce mois</strong>
+              <span>Calculez d'abord la note automatique de chaque chef.</span>
+            </div>
+          ) : (
+            <div className="attendance-table-wrap" style={{ marginBottom: '28px' }}>
+              <table className="attendance-table">
+                <thead>
+                  <tr>
+                    <th>Chef de service</th>
+                    <th>Service</th>
+                    <th>Note auto /20</th>
+                    <th>Note manuelle /20</th>
+                    <th>Score final /20</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {classementChefs.map((n) => {
+                    const chefId = n.utilisateur?.id;
+                    const nom = [n.utilisateur?.prenom, n.utilisateur?.nom]
+                      .filter(Boolean).join(' ') || '—';
+                    return (
+                      <tr key={chefId}>
+                        <td><strong>{nom}</strong></td>
+                        <td>{n.utilisateur?.service?.nom || '—'}</td>
+                        <td>{n.noteAutomatique != null ? `${n.noteAutomatique}/20` : '—'}</td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            max="20"
+                            step="0.5"
+                            value={noteManuelleChefs[chefId] ?? ''}
+                            onChange={(e) => setNoteManuelleChefs((c) => ({
+                              ...c, [chefId]: e.target.value,
+                            }))}
+                            placeholder="0 à 20"
+                            style={{
+                              width: '80px', padding: '4px 8px',
+                              borderRadius: '6px', border: '1px solid #ddd'
+                            }}
+                          />
+                        </td>
+                        <td>
+                          {n.scoreFinal != null ? (
+                            <strong style={{ color: '#1e5131' }}>{n.scoreFinal}/20</strong>
+                          ) : '—'}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              style={{ fontSize: '12px', padding: '5px 10px' }}
+                              onClick={() => handleCalculerNoteChef(chefId)}
+                              disabled={isCalculatingAdmin[chefId]}
+                            >
+                              {isCalculatingAdmin[chefId] ? '...' : '⚙️ Note auto'}
+                            </button>
+                            <button
+                              type="button"
+                              className="primary-button"
+                              style={{ fontSize: '12px', padding: '5px 10px' }}
+                              onClick={() => handleNoterChef(chefId)}
+                              disabled={isNotingChef[chefId]}
+                            >
+                              {isNotingChef[chefId] ? '...' : '✏️ Enregistrer'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Classements */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '24px',
+            marginTop: '8px',
+          }}>
+            <div>
+              {renderClassementBlock(
+                classementChefs,
+                `Chefs de service — ${MOIS_NOMS[notesMoisAdmin - 1]} ${notesAnneeAdmin}`
+              )}
+            </div>
+            <div>
+              {renderClassementBlock(
+                classementAgentsAdmin,
+                `Agents — ${MOIS_NOMS[notesMoisAdmin - 1]} ${notesAnneeAdmin}`
+              )}
+            </div>
+          </div>
+
+          {classementChefs.filter(n => n.scoreFinal != null).length === 0 &&
+            classementAgentsAdmin.filter(n => n.scoreFinal != null).length === 0 && (
+              <div className="dashboard-placeholder dashboard-placeholder-muted"
+                style={{ marginTop: '16px' }}>
+                <strong>Classements indisponibles</strong>
+                <span>Les classements apparaissent dès que les scores finaux sont calculés.</span>
+              </div>
+            )}
+        </>
+      )}
+    </section>
+  );
 
   const renderSection = () => {
     if (activePage === 'requests') {
@@ -964,6 +1297,9 @@ function AdminDashboard() {
     if (activePage === 'pdf') {
       return <PdfDashboard />;
     }
+    if (activePage === 'notes') {
+  return renderNotesAdminPanel();
+}
 
     return renderOverview();
   };

@@ -31,6 +31,12 @@ import PhotoUploadInput from '../components/profil/PhotoUploadInput';
 import useNotificationsPolling from '../hooks/useNotificationsPolling';
 import NotificationToast from '../components/notifications/NotificationToast';
 import { reverseGeocode } from '../services/gpsService';
+import {
+  noterAgent,
+  calculerNoteAutoChef,
+  getClassementAgentsChef,
+} from '../services/noteService';
+
 
 
 const ROLE_CONTENT = {
@@ -49,7 +55,9 @@ const ROLE_CONTENT = {
       { key: 'presences', label: 'Présences agents', icon: 'history' },
       { key: 'operations', label: 'Missions & réunions', icon: 'document' },
       { key: 'historique', label: 'Historique & analyses', icon: 'report' },
+      { key: 'analyseIA', label: 'Analyse IA', icon: 'report' },
       { key: 'justificatifs', label: 'Justificatifs', icon: 'document' },
+      { key: 'notes', label: 'Notes & classement', icon: 'report' },
       { key: 'parametres', label: 'Paramètres', icon: 'settings' },
     ],
   },
@@ -286,6 +294,18 @@ function Dashboard({ user }) {
   const [analysesIAFeedback, setAnalysesIAFeedback] = useState(null);
   const [isGeneratingAnalyseIA, setIsGeneratingAnalyseIA] = useState(false);
   const [hasLoadedAnalysesIA, setHasLoadedAnalysesIA] = useState(false);
+
+  // États Notes mensuelles (chef)
+  const [notesAgents, setNotesAgents] = useState([]);
+  const [classementAgents, setClassementAgents] = useState([]);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const [notesFeedback, setNotesFeedback] = useState(null);
+  const [hasLoadedNotes, setHasLoadedNotes] = useState(false);
+  const [notesMois, setNotesMois] = useState(new Date().getMonth() + 1);
+  const [notesAnnee, setNotesAnnee] = useState(new Date().getFullYear());
+  const [noteManuelleValues, setNoteManuelleValues] = useState({});
+  const [isCalculating, setIsCalculating] = useState({});
+  const [isNotingAgent, setIsNotingAgent] = useState({});
 
   const [profilForm, setProfilForm] = useState({
     nom: '',
@@ -554,7 +574,7 @@ function Dashboard({ user }) {
   }, [roleKey]);
 
   const loadAnalysesIA = useCallback(async ({ silent = false } = {}) => {
-    if (roleKey !== 'AGENT') {
+    if (roleKey !== 'AGENT' && roleKey !== 'CHEF_SERVICE') {
       return;
     }
 
@@ -579,7 +599,27 @@ function Dashboard({ user }) {
       setHasLoadedAnalysesIA(true);
     }
   }, [roleKey]);
+  const loadNotesChef = async ({ silent = false } = {}) => {
+    if (roleKey !== 'CHEF_SERVICE') return;
+    if (!silent) setIsLoadingNotes(true);
+    try {
+      const classement = await getClassementAgentsChef(notesMois, notesAnnee);
+      setClassementAgents(classement);
 
+      // Initialiser les valeurs de notes manuelles
+      const initValues = {};
+      classement.forEach((n) => {
+        initValues[n.utilisateur.id] = n.noteManuelle ?? '';
+      });
+      setNoteManuelleValues(initValues);
+      setNotesFeedback(null);
+    } catch {
+      setNotesFeedback({ type: 'error', message: 'Impossible de charger les notes.' });
+    } finally {
+      if (!silent) setIsLoadingNotes(false);
+      setHasLoadedNotes(true);
+    }
+  };
   const handleGenererAnalyseIA = async () => {
     try {
       setIsGeneratingAnalyseIA(true);
@@ -640,16 +680,22 @@ function Dashboard({ user }) {
   }, [activePage, hasLoadedChefJustificatifs, isLoadingChefJustificatifs, loadChefJustificatifs, roleKey]);
 
   useEffect(() => {
-    if (roleKey === 'AGENT') {
+    if (roleKey === 'AGENT' || roleKey === 'CHEF_SERVICE') {
       loadAnalysesIA({ silent: true });
     }
   }, [loadAnalysesIA, roleKey]);
 
   useEffect(() => {
-    if (roleKey === 'AGENT' && activePage === 'analyseIA' && !isLoadingAnalysesIA && !hasLoadedAnalysesIA) {
+    if ((roleKey === 'AGENT' || roleKey === 'CHEF_SERVICE') && activePage === 'analyseIA' && !isLoadingAnalysesIA && !hasLoadedAnalysesIA) {
       loadAnalysesIA();
     }
   }, [activePage, hasLoadedAnalysesIA, isLoadingAnalysesIA, loadAnalysesIA, roleKey]);
+
+  useEffect(() => {
+    if (roleKey === 'CHEF_SERVICE' && activePage === 'notes') {
+      loadNotesChef();
+    }
+  }, [activePage, roleKey, notesMois, notesAnnee]);
 
   const latestPresence = history[0];
   const activeItem = roleContent.items.find((item) => item.key === activePage) ?? roleContent.items[0];
@@ -793,6 +839,38 @@ function Dashboard({ user }) {
     }
   };
 
+  const handleCalculerNoteAgent = async (agentId) => {
+    setIsCalculating((c) => ({ ...c, [agentId]: true }));
+    setNotesFeedback(null);
+    try {
+      await calculerNoteAutoChef(agentId, notesMois, notesAnnee);
+      await loadNotesChef({ silent: true });
+      showLocalToast({ type: 'success', message: 'Note automatique calculée.' });
+    } catch {
+      showLocalToast({ type: 'error', message: 'Erreur lors du calcul.' });
+    } finally {
+      setIsCalculating((c) => ({ ...c, [agentId]: false }));
+    }
+  };
+
+  const handleNoterAgent = async (agentId) => {
+    const valeur = parseFloat(noteManuelleValues[agentId]);
+    if (isNaN(valeur) || valeur < 0 || valeur > 20) {
+      showLocalToast({ type: 'error', message: 'La note doit être entre 0 et 20.' });
+      return;
+    }
+    setIsNotingAgent((c) => ({ ...c, [agentId]: true }));
+    setNotesFeedback(null);
+    try {
+      await noterAgent(agentId, notesMois, notesAnnee, valeur);
+      await loadNotesChef({ silent: true });
+      showLocalToast({ type: 'success', message: 'Note manuelle enregistrée.' });
+    } catch {
+      showLocalToast({ type: 'error', message: 'Erreur lors de la saisie de la note.' });
+    } finally {
+      setIsNotingAgent((c) => ({ ...c, [agentId]: false }));
+    }
+  };
   const renderPresenceSummary = () => {
     if (!canPoint) {
       return null;
@@ -849,7 +927,7 @@ function Dashboard({ user }) {
       <section className="dashboard-hero-card-agent-hero-card">
         <div className="dashboard-hero-copy">
           <span className="dashboard-status-pill">{roleContent.subtitle}</span>
-          <h1>Bienvenue, {user?.role ||'role' } {user?.prenom || user?.nom ||'utilisateur'}.</h1>
+          <h1>Bienvenue, {user?.role || 'role'} {user?.prenom || user?.nom || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
 
@@ -864,7 +942,7 @@ function Dashboard({ user }) {
       <section className="dashboard-hero-card agent-hero-card">
         <div className="dashboard-hero-copy">
           <span className="dashboard-status-pill">{roleContent.subtitle}</span>
-          <h1>Bienvenue,{user?.role ||'role' } {user?.prenom || user?.nom || 'utilisateur'}.</h1>
+          <h1>Bienvenue,{user?.role || 'role'} {user?.prenom || user?.nom || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
       </section>
@@ -1241,7 +1319,7 @@ function Dashboard({ user }) {
         <article className="dashboard-stat-card chef-metric-card">
           <span>Agents du service</span>
           <strong>{agentsDuService.filter(p => (p.utilisateur?.email || p.email) !== user?.email).length}</strong>
-          
+
           <p>Nombre total d'agents rattachés à votre service.</p>
         </article>
 
@@ -1519,132 +1597,380 @@ function Dashboard({ user }) {
   );
   // Dashboard.jsx - Ajouter après les autres handlers
 
-// Validation d'un justificatif (Accepter)
-const handleValiderJustificatif = async (justificatifId) => {
-  try {
-    const response = await validerJustificatif(justificatifId);
-    showLocalToast({
-      type: 'success',
-      message: response.data || 'Justificatif accepté avec succès.',
-    });
-    // Recharger la liste
-    await loadChefJustificatifs({ silent: true });
-  } catch (error) {
-    showLocalToast({
-      type: 'error',
-      message: error?.response?.data || 'Impossible d\'accepter le justificatif.',
-    });
-  }
-};
+  // Validation d'un justificatif (Accepter)
+  const handleValiderJustificatif = async (justificatifId) => {
+    try {
+      const response = await validerJustificatif(justificatifId);
+      showLocalToast({
+        type: 'success',
+        message: response.data || 'Justificatif accepté avec succès.',
+      });
+      // Recharger la liste
+      await loadChefJustificatifs({ silent: true });
+    } catch (error) {
+      showLocalToast({
+        type: 'error',
+        message: error?.response?.data || 'Impossible d\'accepter le justificatif.',
+      });
+    }
+  };
 
-// Refus d'un justificatif
-const handleRefuserJustificatif = async (justificatifId) => {
-  // Demander un motif de refus (optionnel mais recommandé)
-  const motif = window.prompt('Motif du refus (optionnel) :');
-  // Si l'utilisateur annule, on ne fait rien
-  if (motif === null) return;
+  // Refus d'un justificatif
+  const handleRefuserJustificatif = async (justificatifId) => {
+    // Demander un motif de refus (optionnel mais recommandé)
+    const motif = window.prompt('Motif du refus (optionnel) :');
+    // Si l'utilisateur annule, on ne fait rien
+    if (motif === null) return;
 
-  try {
-    const response = await refuserJustificatif(justificatifId, motif);
-    showLocalToast({
-      type: 'error',
-      message: response.data || 'Justificatif refusé.',
+    try {
+      const response = await refuserJustificatif(justificatifId, motif);
+      showLocalToast({
+        type: 'error',
+        message: response.data || 'Justificatif refusé.',
+      });
+      // Recharger la liste
+      await loadChefJustificatifs({ silent: true });
+    } catch (error) {
+      showLocalToast({
+        type: 'error',
+        message: error?.response?.data || 'Impossible de refuser le justificatif.',
+      });
+    }
+  };
+  const renderChefJustificatifsPanel = () => {
+    // Filtrer les justificatifs : exclure ceux du chef connecté
+    const justificatifsFiltres = chefJustificatifs.filter((item) => {
+      const person = item.utilisateur || item.agent || item.user || item;
+      return person?.email !== user?.email;
     });
-    // Recharger la liste
-    await loadChefJustificatifs({ silent: true });
-  } catch (error) {
-    showLocalToast({
-      type: 'error',
-      message: error?.response?.data || 'Impossible de refuser le justificatif.',
-    });
-  }
-};
-const renderChefJustificatifsPanel = () => {
-  // Filtrer les justificatifs : exclure ceux du chef connecté
-  const justificatifsFiltres = chefJustificatifs.filter((item) => {
-    const person = item.utilisateur || item.agent || item.user || item;
-    return person?.email !== user?.email;
-  });
 
-  return (
+    return (
+      <section className="dashboard-panel dashboard-panel-wide">
+        <div className="admin-section-head">
+          <div>
+            <h2>Justificatifs</h2>
+            <p className="panel-note">Valide les permissions et les justificatifs transmis par les agents.</p>
+          </div>
+          <span className="dashboard-status-pill">Validation</span>
+        </div>
+
+        {isLoadingChefJustificatifs ? (
+          <div className="dashboard-placeholder">
+            <strong>Chargement des justificatifs</strong>
+            <span>Récupération des demandes du service en cours...</span>
+          </div>
+        ) : justificatifsFiltres.length === 0 ? (
+          <div className="dashboard-placeholder">
+            <strong>Aucun justificatif en attente</strong>
+            <span>Les demandes des agents apparaîtront ici dès qu'elles seront soumises.</span>
+          </div>
+        ) : (
+          <div className="chef-justificatifs-grid">
+            {justificatifsFiltres.map((item, index) => {
+              const person = item.utilisateur || item.agent || item.user || item;
+              const name = [person?.nom, person?.prenom].filter(Boolean).join(' ').trim() || person?.email || `Agent ${index + 1}`;
+              const label = item.titre || item.type || 'Justificatif';
+              const status = item.statut || item.status || 'EN_ATTENTE';
+              const dateValue = item.dateCreation || item.dateSoumission || item.createdAt;
+              const isEnAttente = String(status).toUpperCase() === 'EN_ATTENTE';
+              const badgeClass = isEnAttente ? 'is-gps' : String(status).toUpperCase() === 'ACCEPTE' ? 'is-present' : 'is-late';
+
+              return (
+                <article key={item.id ?? `${name}-${index}`} className="chef-justificatif-card">
+                  <div className="chef-justificatif-header">
+                    <strong>{label}</strong>
+                    <span className={`presence-status-badge ${badgeClass}`}>
+                      {isEnAttente ? 'En attente' : String(status).replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  <div className="chef-justificatif-body">
+                    <span className="chef-justificatif-employe">
+                      👤 {name}
+                    </span>
+                    <span className="chef-justificatif-date">
+                      📅 {formatDateTime(dateValue)}
+                    </span>
+                    {item.description && (
+                      <p className="chef-justificatif-description">{item.description}</p>
+                    )}
+                    {item.motifRefus && (
+                      <p className="chef-justificatif-refus">❌ Motif : {item.motifRefus}</p>
+                    )}
+                  </div>
+                  {isEnAttente && (
+                    <div className="chef-justificatif-actions">
+                      <button
+                        type="button"
+                        className="admin-mini-button-success"
+                        onClick={() => handleValiderJustificatif(item.id)}
+                      >
+                        ✓ Accepter
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-mini-button-danger"
+                        onClick={() => handleRefuserJustificatif(item.id)}
+                      >
+                        ✗ Refuser
+                      </button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    );
+  };
+  const renderNotesChefPanel = () => (
     <section className="dashboard-panel dashboard-panel-wide">
       <div className="admin-section-head">
         <div>
-          <h2>Justificatifs</h2>
-          <p className="panel-note">Valide les permissions et les justificatifs transmis par les agents.</p>
+          <h2>Notes & classement</h2>
+          <p className="panel-note">
+            Calculez la note automatique de vos agents, saisissez votre note manuelle
+            et obtenez le score final. Le classement se met à jour automatiquement.
+          </p>
         </div>
-        <span className="dashboard-status-pill">Validation</span>
+        <span className="dashboard-status-pill">Évaluation</span>
       </div>
 
-      {isLoadingChefJustificatifs ? (
-        <div className="dashboard-placeholder">
-          <strong>Chargement des justificatifs</strong>
-          <span>Récupération des demandes du service en cours...</span>
-        </div>
-      ) : justificatifsFiltres.length === 0 ? (
-        <div className="dashboard-placeholder">
-          <strong>Aucun justificatif en attente</strong>
-          <span>Les demandes des agents apparaîtront ici dès qu'elles seront soumises.</span>
-        </div>
-      ) : (
-        <div className="chef-justificatifs-grid">
-          {justificatifsFiltres.map((item, index) => {
-            const person = item.utilisateur || item.agent || item.user || item;
-            const name = [person?.nom, person?.prenom].filter(Boolean).join(' ').trim() || person?.email || `Agent ${index + 1}`;
-            const label = item.titre || item.type || 'Justificatif';
-            const status = item.statut || item.status || 'EN_ATTENTE';
-            const dateValue = item.dateCreation || item.dateSoumission || item.createdAt;
-            const isEnAttente = String(status).toUpperCase() === 'EN_ATTENTE';
-            const badgeClass = isEnAttente ? 'is-gps' : String(status).toUpperCase() === 'ACCEPTE' ? 'is-present' : 'is-late';
+      {/* Sélecteur mois/année */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center' }}>
+        <label className="dashboard-field" style={{ margin: 0 }}>
+          <span>Mois</span>
+          <select
+            value={notesMois}
+            onChange={(e) => {
+              setNotesMois(Number(e.target.value));
+              setHasLoadedNotes(false);
+            }}
+          >
+            {[
+              'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+              'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+            ].map((m, i) => (
+              <option key={i + 1} value={i + 1}>{m}</option>
+            ))}
+          </select>
+        </label>
 
-            return (
-              <article key={item.id ?? `${name}-${index}`} className="chef-justificatif-card">
-                <div className="chef-justificatif-header">
-                  <strong>{label}</strong>
-                  <span className={`presence-status-badge ${badgeClass}`}>
-                    {isEnAttente ? 'En attente' : String(status).replace(/_/g, ' ')}
-                  </span>
-                </div>
-                <div className="chef-justificatif-body">
-                  <span className="chef-justificatif-employe">
-                    👤 {name}
-                  </span>
-                  <span className="chef-justificatif-date">
-                    📅 {formatDateTime(dateValue)}
-                  </span>
-                  {item.description && (
-                    <p className="chef-justificatif-description">{item.description}</p>
-                  )}
-                  {item.motifRefus && (
-                    <p className="chef-justificatif-refus">❌ Motif : {item.motifRefus}</p>
-                  )}
-                </div>
-                {isEnAttente && (
-                  <div className="chef-justificatif-actions">
-                    <button
-                      type="button"
-                      className="admin-mini-button-success"
-                      onClick={() => handleValiderJustificatif(item.id)}
-                    >
-                      ✓ Accepter
-                    </button>
-                    <button
-                      type="button"
-                      className="admin-mini-button-danger"
-                      onClick={() => handleRefuserJustificatif(item.id)}
-                    >
-                      ✗ Refuser
-                    </button>
-                  </div>
-                )}
-              </article>
-            );
-          })}
+        <label className="dashboard-field" style={{ margin: 0 }}>
+          <span>Année</span>
+          <select
+            value={notesAnnee}
+            onChange={(e) => {
+              setNotesAnnee(Number(e.target.value));
+              setHasLoadedNotes(false);
+            }}
+          >
+            {[2024, 2025, 2026, 2027].map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {notesFeedback && (
+        <div className={notesFeedback.type === 'error' ? 'form-error' : 'form-success'}>
+          {notesFeedback.message}
         </div>
       )}
+
+      {isLoadingNotes ? (
+        <div className="dashboard-placeholder">
+          <strong>Chargement des notes</strong>
+          <span>Récupération des données en cours...</span>
+        </div>
+      ) : classementAgents.length === 0 ? (
+        <div className="dashboard-placeholder dashboard-placeholder-muted">
+          <strong>Aucune note pour ce mois</strong>
+          <span>
+            Calculez d'abord la note automatique de chaque agent en cliquant sur
+            "Calculer note auto" dans le tableau ci-dessous.
+          </span>
+        </div>
+      ) : (
+        <>
+          {/* Tableau notes */}
+          <div className="attendance-table-wrap" style={{ marginBottom: '28px' }}>
+            <table className="attendance-table">
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th>Note auto /20</th>
+                  <th>Note manuelle /20</th>
+                  <th>Score final /20</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {classementAgents.map((n) => {
+                  const agentId = n.utilisateur?.id;
+                  const nom = [n.utilisateur?.prenom, n.utilisateur?.nom]
+                    .filter(Boolean).join(' ') || '—';
+                  return (
+                    <tr key={agentId}>
+                      <td><strong>{nom}</strong></td>
+                      <td>
+                        {n.noteAutomatique != null
+                          ? `${n.noteAutomatique}/20`
+                          : '—'}
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min="0"
+                          max="20"
+                          step="0.5"
+                          value={noteManuelleValues[agentId] ?? ''}
+                          onChange={(e) => setNoteManuelleValues((c) => ({
+                            ...c,
+                            [agentId]: e.target.value,
+                          }))}
+                          placeholder="0 à 20"
+                          style={{ width: '80px', padding: '4px 8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                        />
+                      </td>
+                      <td>
+                        {n.scoreFinal != null ? (
+                          <strong style={{ color: '#1e5131' }}>{n.scoreFinal}/20</strong>
+                        ) : '—'}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            style={{ fontSize: '12px', padding: '5px 10px' }}
+                            onClick={() => handleCalculerNoteAgent(agentId)}
+                            disabled={isCalculating[agentId]}
+                          >
+                            {isCalculating[agentId] ? '...' : '⚙️ Note auto'}
+                          </button>
+                          <button
+                            type="button"
+                            className="primary-button"
+                            style={{ fontSize: '12px', padding: '5px 10px' }}
+                            onClick={() => handleNoterAgent(agentId)}
+                            disabled={isNotingAgent[agentId]}
+                          >
+                            {isNotingAgent[agentId] ? '...' : '✏️ Enregistrer'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Classement */}
+          <div className="admin-section-head" style={{ marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700 }}>
+              🏆 Classement du service — {[
+                'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+              ][notesMois - 1]} {notesAnnee}
+            </h3>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {[...classementAgents]
+              .filter((n) => n.scoreFinal != null)
+              .sort((a, b) => b.scoreFinal - a.scoreFinal)
+              .map((n, index) => {
+                const nom = [n.utilisateur?.prenom, n.utilisateur?.nom]
+                  .filter(Boolean).join(' ') || '—';
+                const medals = ['🥇', '🥈', '🥉'];
+                const medal = medals[index] ?? `${index + 1}.`;
+                const pct = (n.scoreFinal / 20) * 100;
+                return (
+                  <div
+                    key={n.utilisateur?.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '14px',
+                      background: index === 0 ? '#f0fdf4' : '#fafafa',
+                      borderRadius: '10px',
+                      padding: '12px 16px',
+                      border: index === 0 ? '1px solid #bbf7d0' : '1px solid #eee',
+                    }}
+                  >
+                    <span style={{ fontSize: '22px', minWidth: '32px' }}>{medal}</span>
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ fontSize: '14px' }}>{nom}</strong>
+                      <div style={{
+                        marginTop: '4px',
+                        height: '6px',
+                        background: '#e5e7eb',
+                        borderRadius: '4px',
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          width: `${pct}%`,
+                          height: '100%',
+                          background: index === 0 ? '#16a34a' : '#1e5eff',
+                          borderRadius: '4px',
+                          transition: 'width 0.4s ease',
+                        }} />
+                      </div>
+                    </div>
+                    <span style={{
+                      fontWeight: 700,
+                      fontSize: '15px',
+                      color: index === 0 ? '#16a34a' : '#1a1a2e',
+                      minWidth: '52px',
+                      textAlign: 'right',
+                    }}>
+                      {n.scoreFinal}/20
+                    </span>
+                  </div>
+                );
+              })}
+            {classementAgents.filter((n) => n.scoreFinal != null).length === 0 && (
+              <div className="dashboard-placeholder dashboard-placeholder-muted">
+                <strong>Classement indisponible</strong>
+                <span>Le classement apparaît dès que les scores finaux sont calculés.</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Agents sans note encore — boutons calculer rapide */}
+      {agentsDuService.filter((a) =>
+        !classementAgents.find((n) => n.utilisateur?.id === a.id)
+      ).length > 0 && (
+          <div style={{ marginTop: '24px' }}>
+            <p style={{ fontSize: '13px', color: '#888', marginBottom: '10px' }}>
+              Agents sans note pour ce mois — cliquez pour calculer leur note automatique :
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {agentsDuService
+                .filter((a) => !classementAgents.find((n) => n.utilisateur?.id === a.id))
+                .map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    className="secondary-button"
+                    style={{ fontSize: '12px', padding: '6px 12px' }}
+                    onClick={() => handleCalculerNoteAgent(a.id)}
+                    disabled={isCalculating[a.id]}
+                  >
+                    {isCalculating[a.id]
+                      ? '...'
+                      : `⚙️ ${[a.prenom, a.nom].filter(Boolean).join(' ')}`}
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
     </section>
   );
-};
 
   const renderChefHistoryPanel = () =>
     renderHistoryPanel({
@@ -1931,7 +2257,9 @@ const renderChefJustificatifsPanel = () => {
     if (activePage === 'pointage') {
       return renderPointagePanel();
     }
-
+    if (activePage === 'analyseIA') {
+      return renderAnalyseIAPanel();
+    }
     if (activePage === 'presences') {
       return renderChefPresencesPanel();
     }
@@ -1942,6 +2270,10 @@ const renderChefJustificatifsPanel = () => {
 
     if (activePage === 'justificatifs') {
       return renderChefJustificatifsPanel();
+    }
+
+    if (activePage === 'notes') {
+      return renderNotesChefPanel();
     }
 
     if (activePage === 'historique') {
