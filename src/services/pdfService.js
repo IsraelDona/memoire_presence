@@ -25,7 +25,37 @@ export async function telechargerRapportPdf() {
 
 export async function getHistoriquePdf() {
   const response = await api.get("/api/admin/rapports-pdf");
-  return response.data;
+  const data = response.data;
+
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.content)) return data.content;
+
+  return [];
+}
+
+export async function consulterRapportPdfHistorique(id) {
+  const openedWindow = window.open("", "_blank");
+  const response = await api.get(`/api/admin/rapports-pdf/telecharger/${id}`, {
+    responseType: "blob",
+  });
+  const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+
+  if (openedWindow) {
+    openedWindow.location.href = url;
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    return;
+  }
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }
 
 export async function supprimerRapportPdf(id) {

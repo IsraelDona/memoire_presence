@@ -14,6 +14,10 @@ function normalizeRole(role) {
     return 'CHEF_SERVICE';
   }
 
+  if (value === 'DIRECTEUR') {
+    return 'DIRECTEUR';
+  }
+
   if (value === 'ADMINISTRATEUR') {
     return 'ADMIN';
   }
@@ -49,6 +53,10 @@ function getRoleKey(role) {
 
 function getDashboardPath(role) {
   const normalizedRole = normalizeRole(role);
+
+  if (normalizedRole === 'DIRECTEUR') {
+    return '/directeur/dashboard';
+  }
 
   if (normalizedRole === 'ADMIN') {
     return '/admin/dashboard';

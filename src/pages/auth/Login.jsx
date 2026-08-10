@@ -103,29 +103,29 @@ function Login() {
   };
 
   return (
-    <div className="auth-dgb-page">
-      <div className="auth-dgb-left">
-        <div className="auth-dgb-brand">
-          <span className="auth-dgb-mark">DGB</span>
-          <span className="auth-dgb-sub">e-presence</span>
+    <div className="auth-di-page">
+      <div className="auth-di-left">
+        <div className="auth-di-brand">
+          <span className="auth-di-mark">DI</span>
+          <span className="auth-di-sub">e-presence</span>
         </div>
         <h1>Bienvenue sur la plateforme de présence</h1>
         <p>Accédez à votre espace personnel sécurisé. Session JWT, redirection automatique selon votre rôle.</p>
-        <div className="auth-dgb-pills">
+        <div className="auth-di-pills">
           <span>🔐 JWT sécurisé</span>
           <span>👤 3 rôles</span>
           <span>📍 GPS actif</span>
         </div>
       </div>
 
-      <div className="auth-dgb-right">
-        <div className="auth-dgb-card">
-          <div className="auth-dgb-card-head">
+      <div className="auth-di-right">
+        <div className="auth-di-card">
+          <div className="auth-di-card-head">
             <h2>Se connecter</h2>
             <p>Email professionnel et mot de passe</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="auth-dgb-form">
+          <form onSubmit={handleSubmit} className="auth-di-form">
             <label className="field-input-wrap">
               <span className="field-icon"><MailIcon /></span>
               <input
@@ -168,14 +168,14 @@ function Login() {
 
             <button
               type="submit"
-              className="auth-dgb-submit"
+              className="auth-di-submit"
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Connexion...' : 'Se connecter'}
             </button>
           </form>
 
-          <div className="auth-dgb-footer">
+          <div className="auth-di-footer">
             <Link to="/register" className="link-muted">
               Pas encore de compte ? <strong>Demander un accès</strong>
             </Link>

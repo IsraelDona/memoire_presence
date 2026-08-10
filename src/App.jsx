@@ -10,6 +10,7 @@ import Register from './pages/auth/Register';
 import AdminDashboard from './pages/admin/Dashboard';
 import AgentDashboard from './pages/agent/Dashboard';
 import ChefServiceDashboard from './pages/chefservice/Dashboard';
+import DirecteurDashboard from './pages/directeur/DirecteurDashboard';
 
 function DashboardRedirect() {
   const { user } = useAuth();
@@ -26,6 +27,7 @@ function App() {
     '/admin/dashboard',
     '/agent/dashboard',
     '/chefservice/dashboard',
+    '/directeur/dashboard',
   ].includes(location.pathname);
 
   return (
@@ -39,6 +41,14 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/signup" element={<Navigate to="/register" replace />} />
           <Route path="/dashboard" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
+          <Route
+            path="/directeur/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['DIRECTEUR']}>
+                <DirecteurDashboard />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/admin/dashboard"
             element={

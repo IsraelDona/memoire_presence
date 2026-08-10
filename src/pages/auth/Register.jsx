@@ -147,29 +147,29 @@ function Register() {
   };
 
   return (
-    <div className="auth-dgb-page">
-      <div className="auth-dgb-left">
-        <div className="auth-dgb-brand">
-          <span className="auth-dgb-mark">DGB</span>
-          <span className="auth-dgb-sub">e-presence</span>
+    <div className="auth-di-page">
+      <div className="auth-di-left">
+        <div className="auth-di-brand">
+          <span className="auth-di-mark">DI</span>
+          <span className="auth-di-sub">e-presence</span>
         </div>
-        <h1>Rejoindre la plateforme DGB</h1>
+        <h1>Rejoindre la plateforme DI</h1>
         <p>Soumettez votre demande. Votre compte sera activé après validation par l'administrateur.</p>
-        <div className="auth-dgb-pills">
+        <div className="auth-di-pills">
           <span>✅ Validation admin</span>
           <span>🔒 Compte sécurisé</span>
           <span>📧 Notification mail</span>
         </div>
       </div>
 
-      <div className="auth-dgb-right">
-        <div className="auth-dgb-card">
-          <div className="auth-dgb-card-head">
+      <div className="auth-di-right">
+        <div className="auth-di-card">
+          <div className="auth-di-card-head">
             <h2>Demande d'inscription</h2>
             <p>Informations professionnelles de l'agent</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="auth-dgb-form">
+          <form onSubmit={handleSubmit} className="auth-di-form">
             <div className="auth-grid-two">
               <label className="field-input-wrap">
                 <span className="field-icon"><UserIcon /></span>
@@ -261,12 +261,12 @@ function Register() {
             {error && <div className="form-error">{error}</div>}
             {success && <div className="form-success">{success}</div>}
 
-            <button type="submit" className="auth-dgb-submit" disabled={isSubmitting}>
+            <button type="submit" className="auth-di-submit" disabled={isSubmitting}>
               {isSubmitting ? 'Envoi...' : 'Soumettre la demande'}
             </button>
           </form>
 
-          <div className="auth-dgb-footer">
+          <div className="auth-di-footer">
             <Link to="/login" className="link-muted">
               Déjà un compte ? <strong>Se connecter</strong>
             </Link>

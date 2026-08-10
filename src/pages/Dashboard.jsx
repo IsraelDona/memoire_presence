@@ -296,11 +296,9 @@ function Dashboard({ user }) {
   const [hasLoadedAnalysesIA, setHasLoadedAnalysesIA] = useState(false);
 
   // États Notes mensuelles (chef)
-  const [notesAgents, setNotesAgents] = useState([]);
   const [classementAgents, setClassementAgents] = useState([]);
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
   const [notesFeedback, setNotesFeedback] = useState(null);
-  const [hasLoadedNotes, setHasLoadedNotes] = useState(false);
   const [notesMois, setNotesMois] = useState(new Date().getMonth() + 1);
   const [notesAnnee, setNotesAnnee] = useState(new Date().getFullYear());
   const [noteManuelleValues, setNoteManuelleValues] = useState({});
@@ -317,9 +315,8 @@ function Dashboard({ user }) {
   const [profilFeedback, setProfilFeedback] = useState(null);
   const [isUpdatingProfil, setIsUpdatingProfil] = useState(false);
 
-  const [isNotificationsOpen, setIsNotificationsOpen] =
-    useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const {
     count: notificationsCount,
     toast: notificationToast,
@@ -334,6 +331,10 @@ function Dashboard({ user }) {
     setTimeout(() => setLocalToast(null), 5000);
   };
 
+  const handleNotificationsCountChange = (count) => {
+    setCountManually(count);
+  };
+
   const notifierAction = (setFeedbackFn, type, message) => {
     setFeedbackFn({ type, message });
 
@@ -343,16 +344,12 @@ function Dashboard({ user }) {
     }, 2500);
   };
 
-  const handleNotificationsCountChange = (count) => {
-    setCountManually(count);
-  };
-
   const [nomLieuAgent, setNomLieuAgent] = useState(null);
 
   const roleKey = normalizeRole(user?.roleKey ?? user?.role);
   const roleContent = ROLE_CONTENT[roleKey] ?? ROLE_CONTENT.AGENT;
   const canPoint = roleKey === 'AGENT' || roleKey === 'CHEF_SERVICE';
-
+  const [operationOuverte, setOperationOuverte] = useState(null);
   useEffect(() => {
     setHasLoadedHistory(false);
     setHasLoadedAgentJustificatifs(false);
@@ -599,7 +596,7 @@ function Dashboard({ user }) {
       setHasLoadedAnalysesIA(true);
     }
   }, [roleKey]);
-  const loadNotesChef = async ({ silent = false } = {}) => {
+ const loadNotesChef = useCallback(async ({ silent = false } = {}) => {
     if (roleKey !== 'CHEF_SERVICE') return;
     if (!silent) setIsLoadingNotes(true);
     try {
@@ -617,9 +614,8 @@ function Dashboard({ user }) {
       setNotesFeedback({ type: 'error', message: 'Impossible de charger les notes.' });
     } finally {
       if (!silent) setIsLoadingNotes(false);
-      setHasLoadedNotes(true);
     }
-  };
+  }, [roleKey, notesMois, notesAnnee]);
   const handleGenererAnalyseIA = async () => {
     try {
       setIsGeneratingAnalyseIA(true);
@@ -695,7 +691,7 @@ function Dashboard({ user }) {
     if (roleKey === 'CHEF_SERVICE' && activePage === 'notes') {
       loadNotesChef();
     }
-  }, [activePage, roleKey, notesMois, notesAnnee]);
+  }, [activePage, roleKey, loadNotesChef]);
 
   const latestPresence = history[0];
   const activeItem = roleContent.items.find((item) => item.key === activePage) ?? roleContent.items[0];
@@ -1409,6 +1405,59 @@ function Dashboard({ user }) {
     </section>
   );
 
+  const renderParticipantSelector = (selectedIds, setForm) => (
+    <div className="participant-selector">
+      <span className="participant-selector-label">
+        Agents concernés
+      </span>
+
+      <div className="participant-list">
+        {agentsDuService.map((agent) => {
+          const agentId = Number(agent.id);
+          const isSelected = selectedIds
+            .map(Number)
+            .includes(agentId);
+
+          const fullName = [agent.prenom, agent.nom]
+            .filter(Boolean)
+            .join(' ');
+
+          return (
+            <button
+              key={agent.id}
+              type="button"
+              className={`participant-card ${isSelected ? 'participant-card-selected' : ''
+                }`}
+              onClick={() => {
+                setForm((current) => ({
+                  ...current,
+                  participantIds: isSelected
+                    ? current.participantIds.filter(
+                      (id) => Number(id) !== agentId
+                    )
+                    : [...current.participantIds, agentId],
+                }));
+              }}
+            >
+              <span className="participant-card-check">
+                {isSelected ? '✓' : '○'}
+              </span>
+
+              <span className="participant-card-name">
+                {fullName}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <span className="participant-selector-help">
+        {selectedIds.length === 0
+          ? 'Aucun agent sélectionné'
+          : `${selectedIds.length} agent(s) sélectionné(s)`}
+      </span>
+    </div>
+  );
   const renderChefOperationsPanel = () => (
     <section className="dashboard-panel dashboard-panel-wide">
       <div className="admin-section-head">
@@ -1429,16 +1478,26 @@ function Dashboard({ user }) {
         <div className="form-success">{chefOperationsFeedback.message}</div>
       )}
 
-      <div className="chef-operations-grid">
-        {/* COLONNE MISSION */}
-        <article className="dashboard-placeholder dashboard-placeholder-muted chef-operation-column">
-          <div className="chef-operation-head">
-            <div>
-              <strong>Nouvelle Mission</strong>
-              <div className="table-subnote">Attribuer des objectifs et une échéance à vos agents.</div>
-            </div>
-          </div>
 
+  <div className="operations-accordion">
+  <button
+    type="button"
+    className="operation-toggle"
+    onClick={() =>
+      setOperationOuverte(
+        operationOuverte === 'mission' ? null : 'mission'
+      )
+    }
+  >
+    <span>
+      <strong>Nouvelle mission</strong>
+      <small>Attribuer une mission aux agents du service</small>
+    </span>
+    <span>{operationOuverte === 'mission' ? '⌃' : '⌄'}</span>
+  </button>
+
+  {operationOuverte === 'mission' && (
+    /* ICI : ton article/formulaire Mission actuel */
           <form className="chef-form" onSubmit={handleMissionSubmit}>
             <div className="chef-form-grid-two">
               <label className="field-input-wrap field-input-wrap-plain">
@@ -1451,24 +1510,10 @@ function Dashboard({ user }) {
                 />
               </label>
 
-              <label className="field-input-wrap field-input-wrap-plain">
-                <select
-                  multiple
-                  value={missionForm.participantIds}
-                  onChange={(event) => {
-                    const selected = Array.from(event.target.selectedOptions).map((opt) => opt.value);
-                    setMissionForm((current) => ({ ...current, participantIds: selected }));
-                  }}
-                  style={{ minHeight: '90px' }}
-                  required
-                >
-                  {agentsDuService.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {[agent.prenom, agent.nom].filter(Boolean).join(' ')}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {renderParticipantSelector(
+                missionForm.participantIds,
+                setMissionForm
+              )}
             </div>
 
             <div className="chef-form-grid-two">
@@ -1508,17 +1553,28 @@ function Dashboard({ user }) {
               </button>
             </div>
           </form>
-        </article>
+        
+  )}
 
-        {/* COLONNE REUNION */}
-        <article className="dashboard-placeholder dashboard-placeholder-muted chef-operation-column">
-          <div className="chef-operation-head">
-            <div>
-              <strong>Nouvelle Réunion de service</strong>
-              <div className="table-subnote">Planifier une convocation avec l'ordre du jour.</div>
-            </div>
-          </div>
 
+  <button
+    type="button"
+    className="operation-toggle"
+    onClick={() =>
+      setOperationOuverte(
+        operationOuverte === 'reunion' ? null : 'reunion'
+      )
+    }
+  >
+    <span>
+      <strong>Nouvelle réunion de service</strong>
+      <small>Planifier une réunion avec les agents</small>
+    </span>
+    <span>{operationOuverte === 'reunion' ? '⌃' : '⌄'}</span>
+  </button>
+
+  {operationOuverte === 'reunion' && (
+    /* ICI : ton article/formulaire Réunion actuel */
           <form className="chef-form" onSubmit={handleReunionSubmit}>
             <label className="field-input-wrap field-input-wrap-plain">
               <input
@@ -1529,24 +1585,10 @@ function Dashboard({ user }) {
                 required
               />
             </label>
-            <label className="field-input-wrap field-input-wrap-plain">
-              <select
-                multiple
-                value={reunionForm.participantIds}
-                onChange={(event) => {
-                  const selected = Array.from(event.target.selectedOptions).map((opt) => opt.value);
-                  setReunionForm((current) => ({ ...current, participantIds: selected }));
-                }}
-                style={{ minHeight: '90px' }}
-                required
-              >
-                {agentsDuService.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {[agent.prenom, agent.nom].filter(Boolean).join(' ')}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {renderParticipantSelector(
+              reunionForm.participantIds,
+              setReunionForm
+            )}
 
             <div className="chef-form-grid-two">
               <label className="field-input-wrap field-input-wrap-plain">
@@ -1584,7 +1626,16 @@ function Dashboard({ user }) {
               </button>
             </div>
           </form>
-        </article>
+  )}
+
+</div>
+
+      <div className="chef-operations-grid">
+        {/* COLONNE MISSION */}
+        
+
+        {/* COLONNE REUNION */}
+        
       </div>
 
       <div className="dashboard-placeholder dashboard-placeholder-muted">
@@ -1744,7 +1795,6 @@ function Dashboard({ user }) {
             value={notesMois}
             onChange={(e) => {
               setNotesMois(Number(e.target.value));
-              setHasLoadedNotes(false);
             }}
           >
             {[
@@ -1762,7 +1812,6 @@ function Dashboard({ user }) {
             value={notesAnnee}
             onChange={(e) => {
               setNotesAnnee(Number(e.target.value));
-              setHasLoadedNotes(false);
             }}
           >
             {[2024, 2025, 2026, 2027].map((a) => (
@@ -2016,6 +2065,12 @@ function Dashboard({ user }) {
           </div>
         ) : (
           <>
+            {!analyseDuJour.analyseComplete && (
+              <div className="form-error" style={{ marginBottom: '12px' }}>
+                ⚠️ Données encore limitées ({analyseDuJour.joursCollectes}/14 jours). Cette analyse est partielle.
+              </div>
+            )}
+
             {renderConseillerCard(analyseDuJour)}
 
             <div className="admin-form-actions" style={{ marginTop: '14px' }}>
@@ -2023,9 +2078,21 @@ function Dashboard({ user }) {
                 type="button"
                 className="secondary-button"
                 onClick={handleGenererAnalyseIA}
-                disabled={isGeneratingAnalyseIA}
+                disabled={isGeneratingAnalyseIA || !analyseDuJour.analyseComplete}
+                title={!analyseDuJour.analyseComplete ? `Disponible dans ${14 - analyseDuJour.joursCollectes} jour(s)` : ''}
+                style={!analyseDuJour.analyseComplete ? {
+                  opacity: 0.5,
+                  cursor: 'not-allowed',
+                  background: '#ccc',
+                  color: '#666',
+                  borderColor: '#ccc',
+                } : {}}
               >
-                {isGeneratingAnalyseIA ? 'Actualisation...' : 'Actualiser mon analyse'}
+                {isGeneratingAnalyseIA
+                  ? 'Actualisation...'
+                  : !analyseDuJour.analyseComplete
+                    ? `Disponible dans ${14 - analyseDuJour.joursCollectes} jour(s)`
+                    : 'Actualiser mon analyse'}
               </button>
             </div>
           </>
@@ -2390,36 +2457,43 @@ function Dashboard({ user }) {
 
 
       <main className="dashboard-main dashboard-main-clean">
-        <div className="dashboard-head">
+        <div className="dashboard-topbar">
           <div />
-          <div className="dashboard-head-actions">
+          <div className="dashboard-topbar-actions">
+            <span className="app-user-chip">{user?.role || roleKey}</span>
             <button
               type="button"
-              className="notification-bell"
+              className="nav-notification-button"
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
             >
               🔔
               {notificationsCount > 0 && (
-                <span className="notification-count">
+                <span className="nav-notification-count">
                   {notificationsCount}
                 </span>
               )}
             </button>
-            <div className="dashboard-user-profile">
+            <button
+              type="button"
+              className="nav-profile-button"
+              onClick={() => setActivePage('parametres')}
+              aria-label="Ouvrir mon profil"
+              title="Ouvrir mon profil"
+            >
 
               {user?.photoProfil ? (
                 <img
                   src={user.photoProfil}
                   alt="profil"
-                  className="dashboard-user-avatar"
+                  className="nav-profile-avatar"
                 />
               ) : (
-                <div className="dashboard-avatar-placeholder">
+                <span className="nav-profile-placeholder">
                   {`${user?.prenom?.[0] || ''}${user?.nom?.[0] || ''}`.toUpperCase() || 'U'}
-                </div>
+                </span>
               )}
 
-            </div>
+            </button>
           </div>
         </div>
 

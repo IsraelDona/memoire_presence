@@ -41,72 +41,72 @@ const features = [
 
 function Landing() {
   return (
-    <div className="landing-dgb">
+    <div className="landing-di">
 
       {/* HERO */}
-      <section className="ldgb-hero">
-        <div className="ldgb-hero-copy">
-          <p className="ldgb-kicker">Direction Générale du Budget — Bénin</p>
+      <section className="ldi-hero">
+        <div className="ldi-hero-copy">
+          <p className="ldi-kicker">Direction Générale du Budget — Direction Informatique — Bénin</p>
           <h1>Gérez la présence de vos agents avec précision</h1>
-          <p className="ldgb-subtitle">
+          <p className="ldi-subtitle">
             e-presence est la plateforme officielle de gestion des présences
-            de la DGB. Pointage GPS, vérification faciale, analyses IA et
+            de la DI. Pointage GPS, vérification faciale, analyses IA et
             supervision en temps réel.
           </p>
-          <div className="ldgb-cta">
-            <Link to="/login" className="ldgb-btn-primary ldgb-btn-large">
+          <div className="ldi-cta">
+            <Link to="/login" className="ldi-btn-primary ldi-btn-large">
               Accéder à la plateforme
             </Link>
-            <Link to="/register" className="ldgb-btn-outline ldgb-btn-large">
+            <Link to="/register" className="ldi-btn-outline ldi-btn-large">
               Demander un compte agent
             </Link>
           </div>
         </div>
 
-        <div className="ldgb-hero-card">
-          <div className="ldgb-hero-card-head">
-            <span className="ldgb-dot-live" />
-            <span>Plateforme active — DGB Bénin</span>
+        <div className="ldi-hero-card">
+          <div className="ldi-hero-card-head">
+            <span className="ldi-dot-live" />
+            <span>Plateforme active — DI Bénin</span>
           </div>
-          <div className="ldgb-stats-row">
+          <div className="ldi-stats-row">
             {stats.map((s) => (
-              <div key={s.label} className="ldgb-stat">
+              <div key={s.label} className="ldi-stat">
                 <strong>{s.value}</strong>
                 <span>{s.label}</span>
               </div>
             ))}
           </div>
-          <div className="ldgb-hero-card-body">
-            <div className="ldgb-presence-demo">
-              <div className="ldgb-presence-orb">✓</div>
+          <div className="ldi-hero-card-body">
+            <div className="ldi-presence-demo">
+              <div className="ldi-presence-orb">✓</div>
               <div>
                 <strong>Présence validée</strong>
                 <span>Zone ministère confirmée · GPS actif</span>
               </div>
             </div>
-            <div className="ldgb-roles-row">
-              <span className="ldgb-role-pill">Admin</span>
-              <span className="ldgb-role-pill">Chef service</span>
-              <span className="ldgb-role-pill">Agent</span>
+            <div className="ldi-roles-row">
+              <span className="ldi-role-pill">Admin</span>
+              <span className="ldi-role-pill">Chef service</span>
+              <span className="ldi-role-pill">Agent</span>
             </div>
           </div>
         </div>
       </section>
 
       {/* FEATURES */}
-      <section className="ldgb-features">
-        <div className="ldgb-section-head">
-          <p className="ldgb-kicker">Fonctionnalités</p>
-          <h2>Tout ce dont la DGB a besoin</h2>
+      <section className="ldi-features">
+        <div className="ldi-section-head">
+          <p className="ldi-kicker">Fonctionnalités</p>
+          <h2>Tout ce dont la DI de la DGB a besoin</h2>
           <p>
             Une plateforme complète pensée pour les besoins réels de
             l'administration publique béninoise.
           </p>
         </div>
-        <div className="ldgb-features-grid">
+        <div className="ldi-features-grid">
           {features.map((f) => (
-            <article key={f.title} className="ldgb-feature-card">
-              <span className="ldgb-feature-icon">{f.icon}</span>
+            <article key={f.title} className="ldi-feature-card">
+              <span className="ldi-feature-icon">{f.icon}</span>
               <h3>{f.title}</h3>
               <p>{f.text}</p>
             </article>
@@ -115,7 +115,7 @@ function Landing() {
       </section>
 
       {/* FOOTER */}
-      <footer className="ldgb-footer">
+      <footer className="ldi-footer">
         <span>
           © 2026 Direction Générale du Budget — République du Bénin
         </span>

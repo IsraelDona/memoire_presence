@@ -1207,6 +1207,144 @@
 .gps-toggle-on .gps-toggle-knob {
   transform: translateX(24px);
 }
+/* ===========================================
+   SÉLECTION DES PARTICIPANTS
+=========================================== */
+
+.participant-selector {
+  display: grid;
+  gap: 10px;
+}
+
+.participant-selector-label {
+  color: #1a3a2a;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.participant-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.participant-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 15px;
+  border: 1px solid #d4ddc8;
+  border-radius: 14px;
+  background: #fff;
+  color: #1a3a2a;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.participant-card:hover {
+  border-color: #8ca88c;
+  box-shadow: 0 6px 16px rgba(26, 58, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.participant-card-selected {
+  border-color: #2d6b47;
+  background: #edf5ed;
+  box-shadow: 0 0 0 2px rgba(45, 107, 71, 0.08);
+}
+
+.participant-card-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  flex-shrink: 0;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.participant-card-name {
+  font-weight: 600;
+}
+
+.participant-selector-help {
+  color: #5a6b5a;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 720px) {
+  .participant-list {
+    grid-template-columns: 1fr;
+  }
+}
+.operations-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.operation-toggle {
+  width: 100%;
+  border: 1px solid #dfe7df;
+  border-radius: 18px;
+  padding: 22px 24px;
+  background: #f8faf6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.operation-toggle:hover {
+  transform: translateY(-2px);
+}
+
+.operation-toggle.active {
+  border-color: #2e7650;
+}
+
+.operation-toggle > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.operation-toggle strong {
+  font-size: 1.05rem;
+}
+
+.operation-toggle small {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.operation-form-wrapper {
+  animation: operationOpen 0.25s ease;
+}
+
+@keyframes operationOpen {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 /* =====================
    CHEF JUSTIFICATIFS
@@ -1302,6 +1440,7 @@
     grid-template-columns: 1fr;
   }
 }
+
 
 /* =====================
    CHEF JUSTIFICATIFS - STYLES PROPRES

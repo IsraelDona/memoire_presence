@@ -25,7 +25,7 @@ import {
   getClassementChefs,
   getClassementAgentsAdmin,
 } from '../../services/noteService';
-
+import { fetchJournaux } from '../../services/journalService';
 
 const INITIAL_CHEF_FORM = {
   nom: '',
@@ -123,6 +123,9 @@ function AdminDashboard() {
   const [isNotingChef, setIsNotingChef] = useState({});
   const [chefsList, setChefsList] = useState([]);
 
+const [logs, setLogs] = useState([]);
+
+
 const showLocalToast = ({ type, message }) => {
   if (localToastRef.current) {
     clearTimeout(localToastRef.current);
@@ -169,6 +172,19 @@ const showLocalToast = ({ type, message }) => {
       }
     }
   }, []);
+  const loadJournaux = async () => {
+  try {
+    const data = await fetchJournaux();
+    setLogs(data);
+  } catch (error) {
+    console.error("Erreur lors du chargement des journaux :", error);
+  }
+};
+useEffect(() => {
+  if (activePage === "logs") {
+    loadJournaux();
+  }
+}, [activePage]);
 
   const chargerStatistiques = useCallback(async () => {
     setIsLoadingStats(true);
@@ -229,8 +245,6 @@ const showLocalToast = ({ type, message }) => {
   }, [activePage]);
 
   const pendingCount = demandes.length;
-
-
 
   const handleProfilSubmit = async (event) => {
     event.preventDefault();
@@ -503,99 +517,58 @@ const showLocalToast = ({ type, message }) => {
   };
 
   const renderOverview = () => (
-    <>
-      <section className="dashboard-panel dashboard-panel-wide">
-        <div className="admin-section-head">
-          <div>
-            <h2>Statistiques globales</h2>
-            <p className="panel-note">Aperçu des principales métriques du système.</p>
-          </div>
-          <span className="dashboard-status-pill">Synthèse</span>
+  <>
+    <section className="dashboard-panel dashboard-panel-wide">
+
+      <div className="admin-section-head">
+        <div>
+          <h2>Espace administrateur</h2>
+          <p className="panel-note">
+            Gérez les comptes utilisateurs, configurez le système et assurez
+            le bon fonctionnement de l'application.
+          </p>
         </div>
 
-        {isLoadingStats ? (
-          <div className="dashboard-placeholder">
-            <strong>Chargement des statistiques</strong>
-            <span>Connexion au backend en cours...</span>
-          </div>
-        ) : stats ? (
-          <>
-            <div className="stats-grid">
-              <div className="stats-item">
-                <label>Agents</label>
-                <strong>{stats.nombreAgents}</strong>
-              </div>
-              <div className="stats-item">
-                <label>Présences</label>
-                <strong>{stats.nombrePresences}</strong>
-              </div>
-              <div className="stats-item">
-                <label>Retards</label>
-                <strong>{stats.nombreRetards}</strong>
-              </div>
-              <div className="stats-item">
-                <label>Analyses IA</label>
-                <strong>{stats.nombreAnalysesIA}</strong>
-              </div>
-              <div className="stats-item">
-                <label>Justificatifs</label>
-                <strong>{stats.nombreJustificatifs}</strong>
-              </div>
-              <div className="stats-item">
-                <label>Missions</label>
-                <strong>{stats.nombreMissions}</strong>
-              </div>
-              <div className="stats-item">
-                <label>Réunions</label>
-                <strong>{stats.nombreReunions}</strong>
-              </div>
-              <div className="stats-item">
-                <label>Score global</label>
-                <strong>{stats.scoreGlobalPonctualite?.toFixed(2)}%</strong>
-              </div>
-            </div>
+        <span className="dashboard-status-pill">
+          Administration
+        </span>
+      </div>
 
-            <div className="charts-grid">
-              <div className="chart-card">
-                <h3>Répartition des présences</h3>
-                {renderRepartitionChart(stats)}
-              </div>
+      <div className="stats-grid">
 
-              <div className="chart-card">
-                <h3>Évolution mensuelle de la ponctualité</h3>
-                {renderEvolutionChart(stats)}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="dashboard-placeholder dashboard-placeholder-muted">
-            <strong>Impossible de charger les statistiques</strong>
-            <span>Vérifiez votre connexion au backend.</span>
-          </div>
-        )}
-      </section>
-
-      <section className="dashboard-panel dashboard-panel-wide">
-        <div className="admin-section-head">
-          <div>
-            <h2>Vue générale</h2>
-            <p className="panel-note">
-              Utilise le menu de gauche pour ouvrir les demandes de comptes, créer un chef service ou consulter les
-              journaux.
-            </p>
-          </div>
-          <span className="dashboard-status-pill">Navigation</span>
+        <div className="stats-item">
+          <label>Demandes en attente</label>
+          <strong>{pendingCount}</strong>
         </div>
 
-        <div className="dashboard-placeholder">
-          <strong>Actions administrateur disponibles</strong>
-          <span>
-            La validation des comptes et la création des chefs service se gèrent dans les sections dédiées.
-          </span>
+        <div className="stats-item">
+          <label>Chefs de service</label>
+          <strong>{services.length}</strong>
         </div>
-      </section>
-    </>
-  );
+
+        <div className="stats-item">
+          <label>Configuration GPS</label>
+          <strong>Active</strong>
+        </div>
+
+      </div>
+
+      <div
+        className="dashboard-placeholder"
+        style={{ marginTop: "25px" }}
+      >
+        <strong>Bienvenue dans l'espace administrateur.</strong>
+
+        <span>
+          Utilisez le menu de gauche pour gérer les comptes, consulter les
+          journaux, générer les rapports PDF et configurer le système.
+        </span>
+
+      </div>
+
+    </section>
+  </>
+);
 
   const PIE_COLORS = ['#2d6b47', '#c9912b', '#c44545'];
 
@@ -808,22 +781,127 @@ const showLocalToast = ({ type, message }) => {
     </section>
   );
 
-  const renderLogs = () => (
-    <section className="dashboard-panel dashboard-panel-wide">
-      <div className="admin-section-head">
-        <div>
-          <h2>Journaux système</h2>
-          <p className="panel-note">Cette zone sera reliée aux traces d’activité et aux exports admin.</p>
-        </div>
-        <span className="dashboard-status-pill">Supervision</span>
+const renderLogs = () => (
+  <section className="dashboard-panel dashboard-panel-wide">
+
+    <div className="admin-section-head">
+      <div>
+        <h2>Journaux d'activités</h2>
+        <p className="panel-note">
+          Consultez toutes les opérations importantes réalisées dans le système.
+        </p>
       </div>
 
-      <div className="dashboard-placeholder dashboard-placeholder-muted">
-        <strong>Module en préparation</strong>
-        <span>Les journaux système seront branchés quand l’API backend sera prête.</span>
-      </div>
-    </section>
-  );
+      <span className="dashboard-status-pill">
+        {logs.length} activités
+      </span>
+    </div>
+
+    <div
+      style={{
+        display: "flex",
+        gap: "15px",
+        marginBottom: "20px",
+        flexWrap: "wrap",
+      }}
+    >
+
+      <input
+        type="text"
+        placeholder="Rechercher une action..."
+        style={{
+          flex: 1,
+          padding: "10px",
+          borderRadius: "8px",
+          border: "1px solid #ddd",
+        }}
+      />
+
+      <select
+        style={{
+          padding: "10px",
+          borderRadius: "8px",
+          border: "1px solid #ddd",
+        }}
+      >
+        <option>Toutes les catégories</option>
+        <option>Compte</option>
+        <option>Configuration</option>
+        <option>Rapport</option>
+      </select>
+
+      <button className="primary-button">
+        Actualiser
+      </button>
+
+    </div>
+
+    <div className="attendance-table-wrap">
+
+      <table className="attendance-table">
+
+        <thead>
+
+          <tr>
+            <th>Date</th>
+            <th>Utilisateur</th>
+            <th>Action</th>
+            <th>Catégorie</th>
+            <th>Résultat</th>
+          </tr>
+
+        </thead>
+
+        <tbody>
+
+          {logs.map((log) => (
+
+            <tr key={log.id}>
+
+              <td>{log.date}</td>
+
+              <td>{log.utilisateur}</td>
+
+              <td>{log.action}</td>
+
+              <td>
+
+                <span className="admin-table-pill">
+
+                  {log.type}
+
+                </span>
+
+              </td>
+
+              <td>
+
+                <span
+                  style={{
+                    color:
+                      log.resultat === "Succès"
+                        ? "#198754"
+                        : "#dc3545",
+                    fontWeight: 600,
+                  }}
+                >
+                  {log.resultat}
+                </span>
+
+              </td>
+
+            </tr>
+
+          ))}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </section>
+);
 
   const renderParametresPanel = () => (
     <section className="dashboard-panel dashboard-panel-wide">
@@ -1333,43 +1411,52 @@ const showLocalToast = ({ type, message }) => {
         onLogout={logout} />
 
       <main className="dashboard-main dashboard-main-clean">
-        <div className="dashboard-head">
-          <div>
-            <p className="dashboard-kicker">Espace administrateur</p>
-            <h1 className="dashboard-title">Pilotage des comptes et de la gouvernance</h1>
-          </div>
-
-          <div className="dashboard-head-actions">
+        <div className="dashboard-topbar">
+          <div className="dashboard-topbar-actions">
+            <span className="app-user-chip">{user?.role || 'ADMIN'}</span>
 
             <button
               type="button"
-              className="notification-bell"
+              className="nav-notification-button"
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
             >
               🔔
               {notificationsCount > 0 && (
-                <span className="notification-count">
+                <span className="nav-notification-count">
                   {notificationsCount}
                 </span>
               )}
             </button>
 
-            <div className="dashboard-user-profile">
+            <button
+              type="button"
+              className="nav-profile-button"
+              onClick={() => setActivePage('parametres')}
+              aria-label="Ouvrir mon profil"
+              title="Ouvrir mon profil"
+            >
 
               {user?.photoProfil ? (
                 <img
                   src={user.photoProfil}
                   alt={user?.nom}
-                  className="dashboard-user-avatar"
+                  className="nav-profile-avatar"
                 />
               ) : (
-                <div className="dashboard-avatar-placeholder">
+                <span className="nav-profile-placeholder">
                   {`${user?.prenom?.[0] || ''}${user?.nom?.[0] || ''}`.toUpperCase()}
-                </div>
+                </span>
               )}
 
-            </div>
+            </button>
 
+          </div>
+        </div>
+
+        <div className="dashboard-head">
+          <div>
+            <p className="dashboard-kicker">Espace administrateur</p>
+            <h1 className="dashboard-title">Pilotage des comptes et de la gouvernance</h1>
           </div>
         </div>
 
