@@ -95,7 +95,7 @@ function Login() {
         requestError?.message ||
         requestError?.response?.data?.message ||
         requestError?.response?.data?.error ||
-        'Connexion impossible. Vérifie tes identifiants ou la disponibilité du backend.';
+        'Connexion impossible. Vérifie tes identifiants et réessaie.';
       setError(apiMessage);
     } finally {
       setIsSubmitting(false);
@@ -110,12 +110,6 @@ function Login() {
           <span className="auth-di-sub">e-presence</span>
         </div>
         <h1>Bienvenue sur la plateforme de présence</h1>
-        <p>Accédez à votre espace personnel sécurisé. Session JWT, redirection automatique selon votre rôle.</p>
-        <div className="auth-di-pills">
-          <span>🔐 JWT sécurisé</span>
-          <span>👤 3 rôles</span>
-          <span>📍 GPS actif</span>
-        </div>
       </div>
 
       <div className="auth-di-right">

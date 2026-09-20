@@ -224,7 +224,7 @@ function FaceEnrollmentModal(props) {
               Bonjour {userName}, enregistre ton visage une seule fois.
             </h2>
             <p style={{ margin: '12px 0 0', color: '#54627d', fontSize: '1rem', lineHeight: 1.6 }}>
-              Cette étape sécurise ton accès avant le dashboard. La caméra sert uniquement à sauvegarder ton visage dans le backend.
+              Cette étape sécurise ton accès. La caméra sert uniquement à enregistrer ton visage pour tes futurs pointages.
             </p>
           </div>
 

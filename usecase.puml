@@ -1,0 +1,51 @@
+@startuml
+left to right direction
+
+actor "Responsable Financière" as RF
+
+rectangle "Système de gestion de l'agence TECH-IMM" {
+
+    ' ===== CAS PRINCIPAUX =====
+    usecase "Gérer les paiements" as UC1
+    usecase "Suivre les paiements" as UC2
+    usecase "Identifier les retardataires" as UC3
+
+    ' ===== CAS DÉTAILLÉS =====
+    usecase "Enregistrer un paiement" as UC11
+    usecase "Consulter les paiements" as UC12
+
+    usecase "Afficher les clients ayant payé" as UC21
+    usecase "Consulter l'historique des paiements" as UC22
+    usecase "Filtrer les paiements par mois" as UC23
+    usecase "Filtrer les paiements par client" as UC24
+
+    usecase "Afficher les clients en retard" as UC31
+    usecase "Vérifier le statut d'un paiement" as UC32
+    usecase "Rechercher un client" as UC33
+}
+
+' ===== ACTEUR → CAS PRINCIPAUX =====
+RF --> UC1
+RF --> UC2
+RF --> UC3
+
+' ===== INCLUDE : GÉRER LES PAIEMENTS =====
+UC1 ..> UC11 : <<include>>
+UC1 ..> UC12 : <<include>>
+
+' ===== INCLUDE : SUIVRE LES PAIEMENTS =====
+UC2 ..> UC21 : <<include>>
+UC2 ..> UC22 : <<include>>
+
+' ===== EXTEND : FILTRES =====
+UC23 ..> UC12 : <<extend>>
+UC24 ..> UC12 : <<extend>>
+
+' ===== INCLUDE : IDENTIFIER LES RETARDATAIRES =====
+UC3 ..> UC31 : <<include>>
+UC3 ..> UC32 : <<include>>
+
+' ===== EXTEND : RECHERCHE =====
+UC33 ..> UC3 : <<extend>>
+
+@enduml

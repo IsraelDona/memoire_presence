@@ -21,22 +21,24 @@ const USER_ICON = new L.Icon({
     shadowSize: [41, 41],
 });
 
-const MINISTERE_POSITION = {
+const DEFAULT_CENTER = {
     latitude: 6.3703,
     longitude: 2.3912,
 };
 
-function PresenceMap({ userPosition, rayonKm = 1 }) {
+function PresenceMap({ userPosition, rayonKm = 1, centerPosition = DEFAULT_CENTER, centerLabel = "Zone autorisée", userLocationName = null }) {
 
     const center = userPosition
         ? [userPosition.latitude, userPosition.longitude]
-        : [MINISTERE_POSITION.latitude, MINISTERE_POSITION.longitude];
+        : [centerPosition.latitude, centerPosition.longitude];
 
     const zoom = userPosition ? 14 : 15;
+    const mapKey = `${centerPosition.latitude}-${centerPosition.longitude}`;
 
     return (
         <div style={{ height: '280px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #d4ddc8' }}>
             <MapContainer
+                key={mapKey}
                 center={center}
                 zoom={zoom}
                 style={{ height: '100%', width: '100%' }}
@@ -49,7 +51,7 @@ function PresenceMap({ userPosition, rayonKm = 1 }) {
 
                 {/* Cercle zone autorisée */}
                 <Circle
-                    center={[MINISTERE_POSITION.latitude, MINISTERE_POSITION.longitude]}
+                    center={[centerPosition.latitude, centerPosition.longitude]}
                     radius={rayonKm * 1000}
                     pathOptions={{
                         color: '#2d6b47',
@@ -59,15 +61,15 @@ function PresenceMap({ userPosition, rayonKm = 1 }) {
                     }}
                 />
 
-                {/* Marqueur ministère */}
+                {/* Marqueur centre */}
                 <Marker
-                    position={[MINISTERE_POSITION.latitude, MINISTERE_POSITION.longitude]}
+                    position={[centerPosition.latitude, centerPosition.longitude]}
                     icon={MINISTERE_ICON}
                 >
                     <Popup>
-                        <strong>Ministère de l'Économie et des Finances</strong>
+                        <strong>{centerLabel}</strong>
                         <br />
-                        Rayon autorisée autour : {rayonKm} km
+                        Rayon autorisé autour : {rayonKm} km
                     </Popup>
                 </Marker>
 
@@ -78,17 +80,7 @@ function PresenceMap({ userPosition, rayonKm = 1 }) {
                         icon={USER_ICON}
                     >
                         <Popup>
-                            <strong>Votre position</strong>
-                            <br />
-                            Lat : {userPosition.latitude.toFixed(6)}
-                            <br />
-                            Lng : {userPosition.longitude.toFixed(6)}
-                            {userPosition.accuracy && (
-                                <>
-                                    <br />
-                                    Précision : ±{Math.round(userPosition.accuracy)} m
-                                </>
-                            )}
+                            <strong>{userLocationName || 'Position capturée'}</strong>
                         </Popup>
                     </Marker>
                 )}

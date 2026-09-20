@@ -51,6 +51,8 @@ function Register() {
     prenom: '',
     email: '',
     telephone: '',
+    matricule: '',
+    poste: '',
     motDePasse: '',
     confirmMotDePasse: '',
     serviceId: '',
@@ -122,6 +124,8 @@ function Register() {
         prenom: form.prenom.trim(),
         email: form.email.trim(),
         telephone: form.telephone.trim(),
+        matricule: form.matricule.trim(),
+        poste: form.poste.trim(),
         motDePasse: form.motDePasse,
         serviceId: form.serviceId || undefined,
       });
@@ -139,7 +143,7 @@ function Register() {
         requestError?.message ||
         requestError?.response?.data?.message ||
         requestError?.response?.data?.error ||
-        'Impossible de créer le compte. Vérifie la connexion au backend.';
+        'Impossible de créer le compte. Vérifie ta connexion et réessaie.';
       setError(apiMessage);
     } finally {
       setIsSubmitting(false);
@@ -154,12 +158,6 @@ function Register() {
           <span className="auth-di-sub">e-presence</span>
         </div>
         <h1>Rejoindre la plateforme DI</h1>
-        <p>Soumettez votre demande. Votre compte sera activé après validation par l'administrateur.</p>
-        <div className="auth-di-pills">
-          <span>✅ Validation admin</span>
-          <span>🔒 Compte sécurisé</span>
-          <span>📧 Notification mail</span>
-        </div>
       </div>
 
       <div className="auth-di-right">
@@ -198,6 +196,17 @@ function Register() {
                 onChange={handleChange} placeholder="Téléphone"
                 autoComplete="tel" required />
             </label>
+
+            <div className="auth-grid-two">
+              <label className="field-input-wrap field-input-wrap-plain">
+                <input name="matricule" type="text" value={form.matricule}
+                  onChange={handleChange} placeholder="Matricule" required />
+              </label>
+              <label className="field-input-wrap field-input-wrap-plain">
+                <input name="poste" type="text" value={form.poste}
+                  onChange={handleChange} placeholder="Poste occupé" required />
+              </label>
+            </div>
 
             {/* PREMIER CHAMP MOT DE PASSE */}
             <label className="field-input-wrap" style={{ position: 'relative' }}>

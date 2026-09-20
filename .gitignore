@@ -21,3 +21,15 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Java build artefacts and JVM crash diagnostics
+**/target/
+hs_err_pid*.log
+replay_pid*.log
+
+# Configuration locale contenant des secrets — ne jamais committer
+mon-presence/src/main/resources/application.properties
+
+# Journaux d'execution
+dev.log
+**/backend.log

@@ -1,24 +1,5 @@
 import api from "../api/axiosConfig";
 
-// CHEF — calculer note auto d'un agent
-export async function calculerNoteAutoChef(agentId, mois, annee) {
-  const response = await api.post(
-    `/api/notes/chef/calculer/${agentId}`,
-    null,
-    { params: { mois, annee } }
-  );
-  return response.data;
-}
-// CHEF — noter un agent
-export async function noterAgent(agentId, mois, annee, note) {
-  const response = await api.post(`/api/notes/chef/noter/${agentId}`, {
-    mois,
-    annee,
-    note,
-  });
-  return response.data;
-}
-
 // CHEF — classement de ses agents
 export async function getClassementAgentsChef(mois, annee) {
   const response = await api.get("/api/notes/chef/classement", {
@@ -66,5 +47,32 @@ export async function getClassementAgentsAdmin(mois, annee) {
 // AGENT/CHEF — mon historique de notes
 export async function getMonHistoriqueNotes() {
   const response = await api.get("/api/notes/mon-historique");
+  return response.data;
+}
+
+export async function calculerNoteChefDirecteur(chefId, mois, annee) {
+  const response = await api.post(
+    `/api/notes/directeur/calculer-chef/${chefId}`,
+    null,
+    {
+      params: { mois, annee },
+    }
+  );
+
+  return response.data;
+}
+// AGENT/CHEF — classement au sein de mon propre service
+export async function getMonClassementService(mois, annee) {
+  const response = await api.get("/api/notes/mon-classement-service", {
+    params: { mois, annee },
+  });
+  return response.data;
+}
+
+// CHEF — classement de tous les chefs de service
+export async function getClassementChefsPourChef(mois, annee) {
+  const response = await api.get("/api/notes/classement-chefs", {
+    params: { mois, annee },
+  });
   return response.data;
 }

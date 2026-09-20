@@ -66,7 +66,17 @@ async function submitJustificatif(payload) {
   };
 }
 
+async function deleteJustificatif(justificatifId) {
+  const response = await api.delete(`${AGENT_JUSTIFICATIFS_LIST_ENDPOINT}/${justificatifId}`);
+
+  return {
+    message: readApiMessage(response?.data, 'Justificatif supprimé avec succès'),
+    status: response?.status,
+  };
+}
+
 export {
   fetchMesJustificatifs,
   submitJustificatif,
+  deleteJustificatif,
 };

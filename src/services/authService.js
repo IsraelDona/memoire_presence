@@ -155,7 +155,7 @@ async function login(credentials) {
   } catch (error) {
     const message = readApiMessage(
       error?.response?.data,
-      'Connexion impossible. Vérifie le backend Spring Boot et l’URL API.'
+      'Connexion impossible. Vérifie ta connexion internet et réessaie.'
     );
 
     throw new Error(message);
@@ -170,6 +170,8 @@ async function registerAgent(payload) {
     telephone: payload.telephone,
     motDePasse: payload.motDePasse,
     serviceId: payload.serviceId,
+    matricule: payload.matricule,
+    poste: payload.poste,
   };
 
 
@@ -183,7 +185,7 @@ async function registerAgent(payload) {
   } catch (error) {
     const message = readApiMessage(
       error?.response?.data,
-      'Impossible de créer le compte. Vérifie le backend Spring Boot et l’URL API.'
+      'Impossible de créer le compte. Vérifie ta connexion internet et réessaie.'
     );
 
     throw new Error(message);

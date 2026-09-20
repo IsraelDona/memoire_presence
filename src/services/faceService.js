@@ -19,7 +19,7 @@ function readFaceServiceError(error) {
   const apiMessage = readApiMessage(error?.response?.data, '');
 
   if (status === 403) {
-    return apiMessage || 'Accès refusé par le backend (403).';
+    return apiMessage || 'Accès refusé. Reconnecte-toi puis réessaie.';
   }
 
   if (status === 401) {
@@ -27,7 +27,7 @@ function readFaceServiceError(error) {
   }
 
   if (status === 400) {
-    return apiMessage || "Le backend a rejeté l'image.";
+    return apiMessage || "L'image n'a pas été acceptée. Réessaie avec une photo plus nette.";
   }
 
   return apiMessage || error?.message || "Impossible d'enregistrer le visage.";

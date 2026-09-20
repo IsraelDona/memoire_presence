@@ -27,7 +27,7 @@ function Sidebar({ activePage, onChangePage, items = [], user, onLogout }) {
   return (
     <aside className="dashboard-sidebar">
       <div className="sidebar-brand">
-        <div className="sidebar-brand-title">DGB</div>
+        <div className="sidebar-brand-title">DI</div>
         <div className="sidebar-brand-subtitle">e-presence</div>
       </div>
 

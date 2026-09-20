@@ -7,15 +7,32 @@ function ProtectedRoute({ children, allowedRoles = [] }) {
   const { isAuthenticated, user } = useAuth();
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: location }}
+      />
+    );
   }
 
-  if (allowedRoles.length > 0) {
-    const currentRole = normalizeRole(user?.role);
-    const normalizedAllowedRoles = allowedRoles.map((role) => normalizeRole(role));
+  const currentRole = normalizeRole(user?.role);
 
-    if (!normalizedAllowedRoles.includes(currentRole)) {
-      return <Navigate to={getDashboardPath(user?.role)} replace />;
+  if (allowedRoles.length > 0) {
+    const normalizedAllowedRoles = allowedRoles.map((role) =>
+      normalizeRole(role)
+    );
+
+    const roleIsAllowed =
+      normalizedAllowedRoles.includes(currentRole);
+
+    if (!roleIsAllowed) {
+      return (
+        <Navigate
+          to={getDashboardPath(user?.role)}
+          replace
+        />
+      );
     }
   }
 

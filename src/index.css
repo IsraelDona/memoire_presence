@@ -5,6 +5,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -104,19 +110,57 @@ body {
   border-radius: 10px;
 }
 
+/*
+ * Hero : la photo couvre tout le bandeau, passée en duotone vert et
+ * recouverte d'un voile uniforme — aucune zone plate, donc aucune
+ * cassure visible. Deux réglages, le reste se recalcule :
+ *
+ *   1. --hero-teinte-rgb : la couleur du vert, en composantes R, G, B.
+ *      Repères : 29, 107, 70 (vif) · 30, 80, 57 (moyen)
+ *                18, 50, 36 (actuel) · 12, 34, 24 (très sombre)
+ *
+ *   2. --hero-voile      : opacité du voile sur toute la photo.
+ *      Plus haut = photo plus effacée et texte plus lisible.
+ *      Repères : 0.35 (photo bien visible) · 0.62 (actuel) · 0.85 (photo à peine suggérée)
+ *      Ne pas descendre sous ~0.45 : le texte blanc deviendrait dur à lire.
+ */
+.ldi-hero-band {
+  --hero-teinte-rgb: 18, 50, 36;
+  --hero-voile: 0.62;
+
+  position: relative;
+  overflow: hidden;
+  background-color: rgb(var(--hero-teinte-rgb));
+  background-image:
+    linear-gradient(
+      rgba(var(--hero-teinte-rgb), var(--hero-voile)),
+      rgba(var(--hero-teinte-rgb), var(--hero-voile))
+    ),
+    url('./assets/hero-bg.webp');
+  background-size: cover, cover;
+  background-position: center, center right;
+  background-repeat: no-repeat, no-repeat;
+  background-blend-mode: normal, luminosity;
+  border-bottom: 4px solid #2d6b47;
+}
+
 .ldi-hero {
   width: min(1240px, 100%);
   margin: 0 auto;
-  padding: 64px 48px 48px;
+  padding: 96px 48px;
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  grid-template-columns: 1fr;
   gap: 48px;
   align-items: center;
+  position: relative;
+  z-index: 1;
+  min-height: 520px;
 }
 
 .ldi-hero-copy {
   display: grid;
   gap: 20px;
+  max-width: 640px;
 }
 
 .ldi-kicker {
@@ -134,6 +178,12 @@ body {
   width: fit-content;
 }
 
+.ldi-hero-band .ldi-kicker {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  border-color: rgba(255,255,255,0.24);
+}
+
 .ldi-hero-copy h1 {
   margin: 0;
   font-size: clamp(2.2rem, 3.8vw, 3.6rem);
@@ -141,6 +191,10 @@ body {
   letter-spacing: -0.04em;
   color: #1a3a2a;
   font-weight: 800;
+}
+
+.ldi-hero-band .ldi-hero-copy h1 {
+  color: #fff;
 }
 
 .ldi-subtitle {
@@ -151,6 +205,10 @@ body {
   max-width: 600px;
 }
 
+.ldi-hero-band .ldi-subtitle {
+  color: rgba(255,255,255,0.82);
+}
+
 .ldi-cta {
   display: flex;
   gap: 14px;
@@ -158,116 +216,19 @@ body {
   margin-top: 8px;
 }
 
-.ldi-hero-card {
+.ldi-hero-band .ldi-btn-primary {
   background: #fff;
-  border-radius: 20px;
-  border: 1px solid #d4ddc8;
-  padding: 24px;
-  box-shadow: 0 12px 32px rgba(26,58,42,0.08);
-  display: grid;
-  gap: 20px;
-}
-
-.ldi-hero-card-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #5a6b5a;
-  font-size: 0.92rem;
-}
-
-.ldi-dot-live {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #2d6b47;
-  box-shadow: 0 0 0 3px rgba(45,107,71,0.2);
-  flex: 0 0 10px;
-}
-
-.ldi-stats-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.ldi-stat {
-  padding: 14px;
-  border-radius: 10px;
-  background: #f5f6f0;
-  border: 1px solid #d4ddc8;
-  border-top: 3px solid #2d6b47;
-  text-align: center;
-  display: grid;
-  gap: 4px;
-}
-
-.ldi-stat strong {
-  font-size: 1.6rem;
-  font-weight: 800;
   color: #1a3a2a;
-  line-height: 1;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
 }
 
-.ldi-stat span {
-  font-size: 0.82rem;
-  color: #7a8a7a;
-}
-
-.ldi-hero-card-body {
-  display: grid;
-  gap: 14px;
-}
-
-.ldi-presence-demo {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px;
-  border-radius: 10px;
-  background: #f0f9f4;
-  border: 1px solid #b8d4be;
-}
-
-.ldi-presence-orb {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: linear-gradient(180deg, #2d6b47 0%, #1a3a2a 100%);
+.ldi-hero-band .ldi-btn-outline {
   color: #fff;
-  display: grid;
-  place-items: center;
-  font-size: 1.2rem;
-  font-weight: 800;
-  flex: 0 0 44px;
-  box-shadow: 0 0 0 4px rgba(45,107,71,0.15);
+  border-color: rgba(255,255,255,0.55);
 }
 
-.ldi-presence-demo strong {
-  display: block;
-  color: #1a3a2a;
-  font-size: 0.95rem;
-}
-
-.ldi-presence-demo span {
-  color: #5a6b5a;
-  font-size: 0.85rem;
-}
-
-.ldi-roles-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.ldi-role-pill {
-  padding: 5px 12px;
-  border-radius: 6px;
-  background: #e8f0ea;
-  color: #1a3a2a;
-  font-size: 0.85rem;
-  font-weight: 700;
-  border: 1px solid #c8d4c0;
+.ldi-hero-band .ldi-btn-outline:hover {
+  background: rgba(255,255,255,0.12);
 }
 
 .ldi-features {
@@ -297,7 +258,7 @@ body {
 
 .ldi-features-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -306,9 +267,17 @@ body {
   border-radius: 14px;
   padding: 22px;
   border: 1px solid #d4ddc8;
-  border-top: 3px solid #2d6b47;
+  border-top: 4px solid #2d6b47;
   box-shadow: 0 4px 12px rgba(26,58,42,0.05);
   transition: all 0.18s ease;
+}
+
+.ldi-feature-card-1 {
+  border-top-color: #3d8c5e;
+}
+
+.ldi-feature-card-2 {
+  border-top-color: #1a3a2a;
 }
 
 .ldi-feature-card:hover {
@@ -316,14 +285,37 @@ body {
   transform: translateY(-2px);
 }
 
-.ldi-feature-icon {
-  display: block;
-  font-size: 1.8rem;
-  margin-bottom: 12px;
+.ldi-feature-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #e8f0ea;
+  color: #1a3a2a;
+  font-weight: 800;
+  font-size: 0.9rem;
+  margin-bottom: 14px;
+}
+
+.ldi-feature-card-0 .ldi-feature-index {
+  background: #2d6b47;
+  color: #fff;
+}
+
+.ldi-feature-card-1 .ldi-feature-index {
+  background: #3d8c5e;
+  color: #fff;
+}
+
+.ldi-feature-card-2 .ldi-feature-index {
+  background: #1a3a2a;
+  color: #fff;
 }
 
 .ldi-feature-card h3 {
-  margin: 0 0 8px;
+  margin: 0 0 12px;
   color: #1a3a2a;
   font-size: 1.02rem;
   font-weight: 700;
@@ -333,6 +325,16 @@ body {
   margin: 0;
   color: #5a6b5a;
   line-height: 1.7;
+  font-size: 0.93rem;
+}
+
+.ldi-feature-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: #5a6b5a;
+  line-height: 1.6;
   font-size: 0.93rem;
 }
 
@@ -352,7 +354,8 @@ body {
 @media (max-width: 1024px) {
   .ldi-hero {
     grid-template-columns: 1fr;
-    padding: 40px 24px 32px;
+    padding: 56px 24px 48px;
+    min-height: 420px;
   }
   .ldi-features {
     padding: 32px 24px 40px;
@@ -377,8 +380,18 @@ body {
     padding: 18px 20px;
     text-align: center;
   }
-  .ldi-stats-row {
-    grid-template-columns: 1fr;
+  /* Le texte occupe toute la largeur : la zone dégagée passe en haut. */
+  .ldi-hero-band {
+    background-image:
+      linear-gradient(
+        180deg,
+        rgb(var(--hero-teinte-rgb)) 0%,
+        rgb(var(--hero-teinte-rgb)) 58%,
+        rgba(var(--hero-teinte-rgb), 0.55) 76%,
+        rgba(var(--hero-teinte-rgb), calc(var(--hero-voile) + 0.20)) 100%
+      ),
+      url('./assets/hero-bg.webp');
+    background-position: center, center right 22%;
   }
 }
 
@@ -387,9 +400,11 @@ body {
    ===================== */
 .auth-di-page {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(420px, 0.85fr);
   background: #f5f6f0;
+  overflow-x: hidden;
 }
 
 .auth-di-left {
@@ -485,10 +500,12 @@ body {
   justify-content: center;
   padding: 40px 40px;
   background: #f5f6f0;
+  min-width: 0;
 }
 
 .auth-di-card {
   width: min(440px, 100%);
+  max-width: 100%;
   background: #fff;
   border-radius: 20px;
   border: 1px solid #d4ddc8;
@@ -548,16 +565,158 @@ body {
   padding-top: 4px;
 }
 
-@media (max-width: 860px) {
+/* ---------- Responsive : login / register ---------- */
+@media (max-width: 980px) {
   .auth-di-page {
     grid-template-columns: 1fr;
   }
   .auth-di-left {
-    padding: 36px 24px;
-    min-height: 220px;
+    display: none;
   }
   .auth-di-right {
-    padding: 28px 16px;
+    padding: 32px 24px;
   }
 }
 
+@media (max-width: 640px) {
+  .auth-di-right {
+    padding: 24px 16px;
+  }
+  .auth-di-card {
+    padding: 28px 22px;
+    border-radius: 16px;
+    gap: 18px;
+  }
+  .auth-di-card-head h2 {
+    font-size: 1.35rem;
+  }
+  .auth-di-card-head p {
+    font-size: 0.9rem;
+  }
+  .auth-di-card .field-input-wrap input,
+  .auth-di-card .field-input-wrap select {
+    height: 48px;
+    font-size: 0.98rem;
+  }
+  .auth-di-submit {
+    height: 48px;
+  }
+  .auth-grid-two {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 380px) {
+  .auth-di-right {
+    padding: 16px 12px;
+  }
+  .auth-di-card {
+    padding: 20px 16px;
+  }
+}
+
+
+.ldi-feature-card-3 {
+  border-top-color: #4f9e72;
+}
+
+.ldi-feature-card-3 .ldi-feature-index {
+  background: #4f9e72;
+  color: #fff;
+}
+
+/* Deroule du pointage : bande claire pour separer des sections blanches */
+.ldi-etapes-band {
+  background: #eef2ea;
+  border-top: 1px solid #d4ddc8;
+  border-bottom: 1px solid #d4ddc8;
+}
+
+.ldi-etapes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  counter-reset: none;
+}
+
+.ldi-etape {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.ldi-etape-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #2d6b47;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.ldi-etape strong {
+  display: block;
+  color: #1a3a2a;
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+
+.ldi-etape p {
+  margin: 0;
+  color: #5a6b5a;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+/* Regles appliquees */
+.ldi-regles-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ldi-regle {
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #d4ddc8;
+  border-left: 4px solid #2d6b47;
+}
+
+.ldi-regle strong {
+  display: block;
+  color: #1a3a2a;
+  font-size: 0.98rem;
+  margin-bottom: 6px;
+}
+
+.ldi-regle p {
+  margin: 0;
+  color: #5a6b5a;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 1024px) {
+  .ldi-etapes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ldi-regles-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .ldi-etapes,
+  .ldi-regles-grid {
+    grid-template-columns: 1fr;
+  }
+}

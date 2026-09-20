@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { fetchStatistiquesGlobales } from '../../services/adminService';
 import useNotificationsPolling from '../../hooks/useNotificationsPolling';
 import { updateMonProfil } from '../../services/profilService';
+import PhotoUploadInput from '../../components/profil/PhotoUploadInput';
 import {
   consulterRapportPdfHistorique,
   getHistoriquePdf,
@@ -28,6 +29,9 @@ import {
   getClassementChefs,
   getClassementAgentsAdmin,
 } from '../../services/noteService';
+import {
+  getChefsService,
+} from '../../services/directeurService';
 
 const DIRECTEUR_ITEMS = [
   { key: 'overview', label: 'Tableau de bord', icon: 'grid' },
@@ -71,6 +75,7 @@ function readApiError(error, fallback) {
 function DirecteurDashboard() {
   const { user, logout, updateUser } = useAuth();
   const [activePage, setActivePage] = useState('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [stats, setStats] = useState(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [statsFeedback, setStatsFeedback] = useState(null);
@@ -106,6 +111,8 @@ function DirecteurDashboard() {
   const [rapportsFeedback, setRapportsFeedback] = useState(null);
   const [isDownloadingRapport, setIsDownloadingRapport] = useState({});
 
+  const [chefsList, setChefsList] = useState([]);
+
   const showLocalToast = ({ type, message }) => {
     if (localToastRef.current) {
       clearTimeout(localToastRef.current);
@@ -115,6 +122,11 @@ function DirecteurDashboard() {
       setLocalToast(null);
       localToastRef.current = null;
     }, 5000);
+  };
+
+  const handlePageChange = (page) => {
+    setActivePage(page);
+    setSidebarOpen(false);
   };
 
   const notifierAction = (setFeedbackFn, type, message) => {
@@ -143,32 +155,72 @@ function DirecteurDashboard() {
   }, []);
 
   const loadNotesAdmin = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setIsLoadingNotesAdmin(true);
+    if (!silent) {
+      setIsLoadingNotesAdmin(true);
+    }
+
     try {
-      const [chefs, agents] = await Promise.all([
+      const [chefs, classement, agents] = await Promise.all([
+        getChefsService(),
         getClassementChefs(notesMoisAdmin, notesAnneeAdmin),
         getClassementAgentsAdmin(notesMoisAdmin, notesAnneeAdmin),
       ]);
-      const chefsList = normalizeList(chefs);
+
+      const chefsActifs = normalizeList(chefs);
+      const classementChefsList = normalizeList(classement);
       const agentsList = normalizeList(agents);
-      setClassementChefs(chefsList);
+
+      setChefsList(chefsActifs);
+      setClassementChefs(classementChefsList);
       setClassementAgentsAdmin(agentsList);
 
+      /*
+       * On associe les données de note à chaque chef.
+       * Ainsi, un chef apparaît même s'il n'a encore aucune note.
+       */
+      const classementParChef = new Map(
+        classementChefsList
+          .filter((note) => note.utilisateur?.id != null)
+          .map((note) => [note.utilisateur.id, note])
+      );
+
+      const notesChefs = chefsActifs.map((chef) => {
+        const noteExistante = classementParChef.get(chef.id);
+
+        return noteExistante || {
+          utilisateur: chef,
+          noteAutomatique: null,
+          noteManuelle: null,
+          scoreFinal: null,
+        };
+      });
+
+      setClassementChefs(notesChefs);
+
       const initValues = {};
-      chefsList.forEach((note) => {
-        if (note.utilisateur?.id != null) {
-          initValues[note.utilisateur.id] = note.noteManuelle ?? '';
+
+      notesChefs.forEach((note) => {
+        const chefId = note.utilisateur?.id;
+
+        if (chefId != null) {
+          initValues[chefId] = note.noteManuelle ?? '';
         }
       });
+
       setNoteManuelleChefs(initValues);
       setNotesFeedbackAdmin(null);
     } catch (error) {
       setNotesFeedbackAdmin({
         type: 'error',
-        message: readApiError(error, 'Impossible de charger les notes.'),
+        message: readApiError(
+          error,
+          'Impossible de charger les notes.'
+        ),
       });
     } finally {
-      if (!silent) setIsLoadingNotesAdmin(false);
+      if (!silent) {
+        setIsLoadingNotesAdmin(false);
+      }
     }
   }, [notesMoisAdmin, notesAnneeAdmin]);
 
@@ -336,10 +388,22 @@ function DirecteurDashboard() {
     );
   }
 
-  const renderClassementBlock = (liste, titre) => {
+  /*
+   * La note retenue est le score final s'il existe, sinon la note
+   * automatique. Filtrer sur le seul scoreFinal écartait tous ceux
+   * qui n'ont pas encore reçu de note manuelle, alors qu'ils ont
+   * bien une note automatique et doivent figurer au classement.
+   */
+  const noteDuClassement = (item, avecNoteManuelle = true) =>
+    (avecNoteManuelle ? item?.scoreFinal ?? item?.noteAutomatique : item?.noteAutomatique) ?? null;
+
+  const renderClassementBlock = (liste, titre, avecNoteManuelle = true) => {
+    const valeur = (item) => noteDuClassement(item, avecNoteManuelle);
+
     const triee = [...liste]
-      .filter((item) => item.scoreFinal != null)
-      .sort((a, b) => b.scoreFinal - a.scoreFinal);
+      .filter((item) => valeur(item) != null)
+      .sort((a, b) => valeur(b) - valeur(a))
+      .slice(0, 3);
 
     if (triee.length === 0) return null;
 
@@ -353,7 +417,8 @@ function DirecteurDashboard() {
             const nom = [item.utilisateur?.prenom, item.utilisateur?.nom].filter(Boolean).join(' ') || '—';
             const medals = ['🥇', '🥈', '🥉'];
             const medal = medals[index] ?? `${index + 1}.`;
-            const pct = (item.scoreFinal / 20) * 100;
+            const note = valeur(item);
+            const pct = (note / 20) * 100;
             return (
               <div
                 key={item.utilisateur?.id}
@@ -378,7 +443,7 @@ function DirecteurDashboard() {
                   </div>
                 </div>
                 <span style={{ fontWeight: 700, fontSize: '14px', color: index === 0 ? '#16a34a' : '#1a1a2e', minWidth: '48px', textAlign: 'right' }}>
-                  {item.scoreFinal}/20
+                  {note.toFixed(2)}/20
                 </span>
               </div>
             );
@@ -402,7 +467,7 @@ function DirecteurDashboard() {
         {isLoadingStats ? (
           <div className="dashboard-placeholder">
             <strong>Chargement des statistiques</strong>
-            <span>Connexion au backend en cours...</span>
+            <span>Chargement des données en cours...</span>
           </div>
         ) : stats ? (
           <>
@@ -412,16 +477,16 @@ function DirecteurDashboard() {
                 <strong>{stats.nombreAgents}</strong>
               </div>
               <div className="stats-item">
+                <label>Chefs de service</label>
+                <strong>{stats.nombreChefsService}</strong>
+              </div>
+              <div className="stats-item">
                 <label>Présences</label>
                 <strong>{stats.nombrePresences}</strong>
               </div>
               <div className="stats-item">
                 <label>Retards</label>
                 <strong>{stats.nombreRetards}</strong>
-              </div>
-              <div className="stats-item">
-                <label>Analyses IA</label>
-                <strong>{stats.nombreAnalysesIA}</strong>
               </div>
               <div className="stats-item">
                 <label>Justificatifs</label>
@@ -456,7 +521,7 @@ function DirecteurDashboard() {
         ) : (
           <div className="dashboard-placeholder dashboard-placeholder-muted">
             <strong>Impossible de charger les statistiques</strong>
-            <span>{statsFeedback || 'Vérifiez votre connexion au backend.'}</span>
+            <span>{statsFeedback || 'Vérifiez votre connexion et réessayez.'}</span>
           </div>
         )}
       </section>
@@ -540,10 +605,10 @@ function DirecteurDashboard() {
         <>
           <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Évaluation des chefs de service</h3>
 
-          {classementChefs.length === 0 ? (
-            <div className="dashboard-placeholder dashboard-placeholder-muted" style={{ marginBottom: '24px' }}>
-              <strong>Aucune note chef pour ce mois</strong>
-              <span>Calculez d'abord la note automatique de chaque chef.</span>
+          {chefsList.length === 0 ? (
+            <div className="dashboard-placeholder dashboard-placeholder-muted">
+              <strong>Aucun chef de service</strong>
+              <span>Aucun chef de service actif n'est disponible.</span>
             </div>
           ) : (
             <div className="attendance-table-wrap" style={{ marginBottom: '28px' }}>
@@ -568,6 +633,7 @@ function DirecteurDashboard() {
                         <td>{note.utilisateur?.service?.nom || '—'}</td>
                         <td>{note.noteAutomatique != null ? `${note.noteAutomatique}/20` : '—'}</td>
                         <td>
+
                           <input
                             type="number"
                             min="0"
@@ -584,7 +650,13 @@ function DirecteurDashboard() {
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            <button type="button" className="primary-button" style={{ fontSize: '12px', padding: '5px 10px' }} onClick={() => handleNoterChef(chefId)} disabled={isNotingChef[chefId]}>
+                            <button
+                              type="button"
+                              className="primary-button"
+                              style={{ fontSize: '12px', padding: '5px 10px' }}
+                              onClick={() => handleNoterChef(chefId)}
+                              disabled={isNotingChef[chefId]}
+                            >
                               {isNotingChef[chefId] ? '...' : '✏️ Enregistrer'}
                             </button>
                           </div>
@@ -649,13 +721,13 @@ function DirecteurDashboard() {
             {renderClassementBlock(classementChefs, `Chefs de service — ${MOIS_NOMS[notesMoisAdmin - 1]} ${notesAnneeAdmin}`)}
           </div>
           <div>
-            {renderClassementBlock(classementAgentsAdmin, `Agents — ${MOIS_NOMS[notesMoisAdmin - 1]} ${notesAnneeAdmin}`)}
+            {renderClassementBlock(classementAgentsAdmin, `Agents — ${MOIS_NOMS[notesMoisAdmin - 1]} ${notesAnneeAdmin}`, false)}
           </div>
-          {classementChefs.filter((item) => item.scoreFinal != null).length === 0 &&
-            classementAgentsAdmin.filter((item) => item.scoreFinal != null).length === 0 && (
+          {classementChefs.filter((item) => noteDuClassement(item) != null).length === 0 &&
+            classementAgentsAdmin.filter((item) => noteDuClassement(item, false) != null).length === 0 && (
               <div className="dashboard-placeholder dashboard-placeholder-muted" style={{ gridColumn: '1 / -1' }}>
                 <strong>Classements indisponibles</strong>
-                <span>Les classements apparaîtront dès que les scores finaux seront calculés.</span>
+                <span>Les classements apparaîtront dès les premiers pointages enregistrés.</span>
               </div>
             )}
         </div>
@@ -751,6 +823,11 @@ function DirecteurDashboard() {
           <p className="panel-note">Gère tes informations personnelles et tes accès de connexion.</p>
         </div>
         <span className="dashboard-status-pill">Profil</span>
+      </div>
+
+      <div className="dashboard-placeholder" style={{ marginTop: '1rem' }}>
+        <strong>Photo de profil</strong>
+        <PhotoUploadInput />
       </div>
 
       <div className="dashboard-placeholder" style={{ marginTop: '1rem' }}>
@@ -851,10 +928,37 @@ function DirecteurDashboard() {
         </div>
       )}
 
-      <Sidebar role="DIRECTEUR" activePage={activePage} onChangePage={setActivePage} items={DIRECTEUR_ITEMS} user={user} onLogout={logout} />
+      <div className={`sidebar-drawer ${sidebarOpen ? 'open' : ''}`}>
+        <button
+          type="button"
+          className="dashboard-close-btn"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Fermer le menu"
+        >
+          ✕
+        </button>
+        <Sidebar role="DIRECTEUR" activePage={activePage} onChangePage={handlePageChange} items={DIRECTEUR_ITEMS} user={user} onLogout={logout} />
+      </div>
+
+      {sidebarOpen && (
+        <div
+          className="dashboard-overlay"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       <main className="dashboard-main dashboard-main-clean">
         <header className="dashboard-topbar">
+          <button
+            type="button"
+            className="dashboard-menu-btn"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Ouvrir le menu"
+            aria-expanded={sidebarOpen}
+          >
+            ☰
+          </button>
+
           <div className="dashboard-topbar-actions">
             <span className="app-user-chip">{user?.role || 'DIRECTEUR'}</span>
 
@@ -874,7 +978,7 @@ function DirecteurDashboard() {
             <button
               type="button"
               className="nav-profile-button"
-              onClick={() => setActivePage('parametres')}
+              onClick={() => handlePageChange('parametres')}
               aria-label="Ouvrir mon profil"
               title="Ouvrir mon profil"
             >

@@ -91,9 +91,29 @@ async function fetchJustificatifsChef() {
   };
 }
 
+
+async function supprimerChefMission(missionId) {
+  const response = await api.delete('/api/chef-service/missions/' + missionId);
+
+  return {
+    message: readApiMessage(response?.data, 'Mission supprimée'),
+    status: response?.status,
+  };
+}
+
+async function supprimerChefReunion(reunionId) {
+  const response = await api.delete('/api/chef-service/reunions/' + reunionId);
+
+  return {
+    message: readApiMessage(response?.data, 'Réunion supprimée'),
+    status: response?.status,
+  };
+}
 export {
   createChefMission,
   createChefReunion,
+  supprimerChefMission,
+  supprimerChefReunion,
   fetchChefMissions,
   fetchChefReunions,
   fetchEquipePresences,

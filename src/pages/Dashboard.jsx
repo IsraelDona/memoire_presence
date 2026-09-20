@@ -5,10 +5,13 @@ import { normalizeRole } from '../services/authService';
 import {
   fetchMesJustificatifs,
   submitJustificatif,
+  deleteJustificatif,
 } from '../services/agentService';
 import {
   createChefMission,
   createChefReunion,
+  supprimerChefMission,
+  supprimerChefReunion,
   fetchChefMissions,
   fetchChefReunions,
   fetchEquipePresences,
@@ -17,24 +20,31 @@ import {
   validerJustificatif,      // ✅ AJOUTÉ
   refuserJustificatif       // ✅ AJOUTÉ
 } from '../services/chefService';
-import { fetchMesPresences, marquerPresence } from '../services/presenceService';
+import {
+  fetchMesPresences,
+  marquerPresence,
+  verifierZone,
+  fetchContexteDuJour,
+} from '../services/presenceService';
 import { genererAnalyseIA, fetchMesAnalysesIA } from '../services/analyseIAService';
 import Notifications from '../components/notifications/Notifications';
 import PresenceMap from '../components/map/PresenceMap';
 import { useAuth } from '../context/AuthContext';
 import '../styles/dashboard.css';
 import {
-  updateMonProfil
+  updateMonProfil,
+  getMonChefService
 } from '../services/profilService';
 import PhotoUploadInput from '../components/profil/PhotoUploadInput';
 
 import useNotificationsPolling from '../hooks/useNotificationsPolling';
 import NotificationToast from '../components/notifications/NotificationToast';
 import { reverseGeocode } from '../services/gpsService';
+import { getGpsConfig } from '../services/gpsConfigService';
 import {
-  noterAgent,
-  calculerNoteAutoChef,
   getClassementAgentsChef,
+  getMonClassementService,
+  getClassementChefsPourChef,
 } from '../services/noteService';
 
 
@@ -57,7 +67,6 @@ const ROLE_CONTENT = {
       { key: 'historique', label: 'Historique & analyses', icon: 'report' },
       { key: 'analyseIA', label: 'Analyse IA', icon: 'report' },
       { key: 'justificatifs', label: 'Justificatifs', icon: 'document' },
-      { key: 'notes', label: 'Notes & classement', icon: 'report' },
       { key: 'parametres', label: 'Paramètres', icon: 'settings' },
     ],
   },
@@ -81,41 +90,13 @@ const ROLE_CONTENT = {
   },
 };
 
-const DEFAULT_POINTAGE = 'BUREAU';
-const MINISTRY_ZONE = {
-  label: 'Ministère de l’Économie et des Finances',
+const DEFAULT_POINTAGE = "BUREAU";
+const DEFAULT_GPS_CONFIG = {
+  nom: "Ministere de l’Economie et des Finances",
   latitude: 6.3703,
   longitude: 2.3912,
-  radiusKm: 1,
+  rayonKm: 1.0,
 };
-
-function FingerprintIcon() {
-  return (
-    <svg viewBox="0 0 96 96" aria-hidden="true">
-      <path d="M33 19c6-4 12-6 15-6 14 0 25 10 25 24 0 6-2 11-5 15" />
-      <path d="M27 30c4-5 10-8 20-8 17 0 31 13 31 30 0 8-2 16-6 22" />
-      <path d="M23 41c3-7 10-12 18-12 13 0 23 10 23 23 0 8-2 15-6 22" />
-      <path d="M28 59c2 11 8 17 18 23" />
-      <path d="M40 34c3-2 6-3 9-3 9 0 16 7 16 16 0 8-2 16-6 24" />
-      <path d="M46 47c0-5 4-9 9-9 6 0 10 5 10 11 0 7-2 13-5 19" />
-      <path d="M64 68c-1 6-4 11-8 16" />
-      <path d="M19 72c5-3 8-8 10-14" />
-      <circle cx="71" cy="63" r="9" />
-      <path d="M71 57v13" />
-      <path d="M65 63h12" />
-    </svg>
-  );
-}
-
-function MapPinIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 21s6-5.3 6-10a6 6 0 1 0-12 0c0 4.7 6 10 6 10Z" />
-      <circle cx="12" cy="11" r="2.2" />
-    </svg>
-  );
-}
-
 
 function calculateDistanceKm(start, end) {
   if (!start || !end) {
@@ -193,6 +174,22 @@ function formatPresenceType(typePresence) {
   return value.replace(/_/g, ' ');
 }
 
+function formatDateOnly(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(date);
+}
+
+function formatPeriode(dateDebut, dateFin) {
+  const debut = formatDateOnly(dateDebut);
+  const fin = formatDateOnly(dateFin);
+
+  if (debut === '—' || fin === '—') return '—';
+  if (debut === fin) return debut;
+  return `${debut} → ${fin}`;
+}
+
 function getPresenceBadgeClass(status) {
   const value = String(status ?? '').toUpperCase();
 
@@ -208,7 +205,7 @@ function getPresenceBadgeClass(status) {
 }
 
 function getGpsLabel() {
-  return 'Position GPS capturée et envoyée au backend';
+  return 'Position GPS capturée';
 }
 
 function getPosition() {
@@ -244,6 +241,7 @@ function Dashboard({ user }) {
   const [agentJustificatifs, setAgentJustificatifs] = useState([]);
   const [isLoadingAgentJustificatifs, setIsLoadingAgentJustificatifs] = useState(false);
   const [agentJustificatifsFeedback, setAgentJustificatifsFeedback] = useState(null);
+  const [monChefService, setMonChefService] = useState(null);
   const [isSubmittingAgentJustificatif, setIsSubmittingAgentJustificatif] = useState(false);
   const [agentJustificatifForm, setAgentJustificatifForm] = useState({
     typeJustificatif: '',
@@ -255,6 +253,7 @@ function Dashboard({ user }) {
   const [isSubmittingPointage, setIsSubmittingPointage] = useState(false);
   const [pointageFeedback, setPointageFeedback] = useState(null);
   const [pointageType, setPointageType] = useState(DEFAULT_POINTAGE);
+  const [contextePointage, setContextePointage] = useState(null);
   const [currentPosition, setCurrentPosition] = useState(null);
   const [isFaceVerificationOpen, setIsFaceVerificationOpen] = useState(false);
   const [chefPresences, setChefPresences] = useState([]);
@@ -267,17 +266,20 @@ function Dashboard({ user }) {
   const [chefOperationsFeedback, setChefOperationsFeedback] = useState(null);
   const [isSubmittingMission, setIsSubmittingMission] = useState(false);
   const [isSubmittingReunion, setIsSubmittingReunion] = useState(false);
+  const [isDeletingOperation, setIsDeletingOperation] = useState(false);
   const [missionForm, setMissionForm] = useState({
     titre: '',
     description: '',
     participantIds: [],
     echeance: '',
-    lieu: '', // <--- Ajoute ça ici
+    lieu: '',
+    rayonKm: '',
   });
   const [reunionForm, setReunionForm] = useState({
     titre: '',
     ordreDuJour: '',
     lieu: '',
+    rayonKm: '',
     dateReunion: '',
     participantIds: [],
   });
@@ -291,6 +293,8 @@ function Dashboard({ user }) {
   const [hasLoadedChefJustificatifs, setHasLoadedChefJustificatifs] = useState(false);
   const [analysesIA, setAnalysesIA] = useState([]);
   const [isLoadingAnalysesIA, setIsLoadingAnalysesIA] = useState(false);
+  const [classement, setClassement] = useState([]);
+  const [isLoadingClassement, setIsLoadingClassement] = useState(false);
   const [analysesIAFeedback, setAnalysesIAFeedback] = useState(null);
   const [isGeneratingAnalyseIA, setIsGeneratingAnalyseIA] = useState(false);
   const [hasLoadedAnalysesIA, setHasLoadedAnalysesIA] = useState(false);
@@ -301,9 +305,6 @@ function Dashboard({ user }) {
   const [notesFeedback, setNotesFeedback] = useState(null);
   const [notesMois, setNotesMois] = useState(new Date().getMonth() + 1);
   const [notesAnnee, setNotesAnnee] = useState(new Date().getFullYear());
-  const [noteManuelleValues, setNoteManuelleValues] = useState({});
-  const [isCalculating, setIsCalculating] = useState({});
-  const [isNotingAgent, setIsNotingAgent] = useState({});
 
   const [profilForm, setProfilForm] = useState({
     nom: '',
@@ -335,6 +336,11 @@ function Dashboard({ user }) {
     setCountManually(count);
   };
 
+  const handlePageChange = (page) => {
+    setActivePage(page);
+    setSidebarOpen(false);
+  };
+
   const notifierAction = (setFeedbackFn, type, message) => {
     setFeedbackFn({ type, message });
 
@@ -345,6 +351,7 @@ function Dashboard({ user }) {
   };
 
   const [nomLieuAgent, setNomLieuAgent] = useState(null);
+  const [gpsConfig, setGpsConfig] = useState(DEFAULT_GPS_CONFIG);
 
   const roleKey = normalizeRole(user?.roleKey ?? user?.role);
   const roleContent = ROLE_CONTENT[roleKey] ?? ROLE_CONTENT.AGENT;
@@ -357,6 +364,27 @@ function Dashboard({ user }) {
     setHasLoadedChefOperations(false);
     setHasLoadedChefJustificatifs(false);
   }, [roleKey]);
+
+  useEffect(() => {
+    const loadGpsConfig = () => {
+      getGpsConfig()
+        .then((data) => {
+          if (data) {
+            setGpsConfig({
+              nom: data.nom || data.nomLieu,
+              latitude: data.latitude,
+              longitude: data.longitude,
+              rayonKm: data.rayonKm,
+            });
+          }
+        })
+        .catch((err) => console.error("Erreur de récupération de la config GPS:", err));
+    };
+
+    loadGpsConfig();
+    const interval = setInterval(loadGpsConfig, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const loadHistory = useCallback(async ({ silent = false } = {}) => {
     if (!canPoint) {
@@ -429,6 +457,16 @@ function Dashboard({ user }) {
       loadAgentJustificatifs({ silent: true });
     }
   }, [loadAgentJustificatifs, roleKey]);
+
+  useEffect(() => {
+    if (roleKey !== 'AGENT') {
+      return;
+    }
+
+    getMonChefService()
+      .then(setMonChefService)
+      .catch(() => setMonChefService(null));
+  }, [roleKey]);
 
   useEffect(() => {
     if (roleKey === 'AGENT' && activePage === 'demandes' && !isLoadingAgentJustificatifs
@@ -596,19 +634,40 @@ function Dashboard({ user }) {
       setHasLoadedAnalysesIA(true);
     }
   }, [roleKey]);
+
+  /*
+   * Classement affiché sous l'analyse : parmi les chefs de service
+   * pour un chef, parmi les membres de son service pour un agent.
+   */
+  const loadClassement = useCallback(async () => {
+    if (roleKey !== 'AGENT' && roleKey !== 'CHEF_SERVICE') {
+      return;
+    }
+
+    setIsLoadingClassement(true);
+
+    const maintenant = new Date();
+    const mois = maintenant.getMonth() + 1;
+    const annee = maintenant.getFullYear();
+
+    try {
+      const data = roleKey === 'CHEF_SERVICE'
+        ? await getClassementChefsPourChef(mois, annee)
+        : await getMonClassementService(mois, annee);
+
+      setClassement(Array.isArray(data) ? data : []);
+    } catch {
+      setClassement([]);
+    } finally {
+      setIsLoadingClassement(false);
+    }
+  }, [roleKey]);
  const loadNotesChef = useCallback(async ({ silent = false } = {}) => {
     if (roleKey !== 'CHEF_SERVICE') return;
     if (!silent) setIsLoadingNotes(true);
     try {
       const classement = await getClassementAgentsChef(notesMois, notesAnnee);
       setClassementAgents(classement);
-
-      // Initialiser les valeurs de notes manuelles
-      const initValues = {};
-      classement.forEach((n) => {
-        initValues[n.utilisateur.id] = n.noteManuelle ?? '';
-      });
-      setNoteManuelleValues(initValues);
       setNotesFeedback(null);
     } catch {
       setNotesFeedback({ type: 'error', message: 'Impossible de charger les notes.' });
@@ -687,6 +746,42 @@ function Dashboard({ user }) {
     }
   }, [activePage, hasLoadedAnalysesIA, isLoadingAnalysesIA, loadAnalysesIA, roleKey]);
 
+  /*
+   * Le classement est rechargé à chaque ouverture de l'onglet :
+   * les notes des collègues ont pu évoluer entre-temps.
+   */
+  useEffect(() => {
+    if (activePage === 'analyseIA') {
+      loadClassement();
+    }
+  }, [activePage, loadClassement]);
+
+  /*
+   * Contexte du jour : mission, réunion ou bureau. Le type de
+   * pointage en découle, l'agent ne le choisit plus.
+   */
+  useEffect(() => {
+    if (roleKey !== 'AGENT' && roleKey !== 'CHEF_SERVICE') {
+      return;
+    }
+
+    if (activePage !== 'pointage' && activePage !== 'overview') {
+      return;
+    }
+
+    fetchContexteDuJour()
+      .then((contexte) => {
+        if (!contexte) {
+          return;
+        }
+        setContextePointage(contexte);
+        if (contexte.typePresence) {
+          setPointageType(contexte.typePresence);
+        }
+      })
+      .catch(() => setContextePointage(null));
+  }, [activePage, roleKey]);
+
   useEffect(() => {
     if (roleKey === 'CHEF_SERVICE' && activePage === 'notes') {
       loadNotesChef();
@@ -736,24 +831,47 @@ function Dashboard({ user }) {
     }
   };
 
+  const handleDeleteJustificatif = async (justificatifId) => {
+    if (!window.confirm('Es-tu sûr de vouloir supprimer ce justificatif ?')) {
+      return;
+    }
+
+    try {
+      await deleteJustificatif(justificatifId);
+      showLocalToast({
+        type: 'success',
+        message: 'Justificatif supprimé avec succès.',
+      });
+      await loadAgentJustificatifs({ silent: true });
+    } catch (error) {
+      const errorCode = error?.response?.status;
+      let errorMsg = 'Impossible de supprimer le justificatif.';
+
+      if (errorCode === 403) {
+        errorMsg = 'Vous n\'avez pas la permission de supprimer ce justificatif.';
+      } else if (errorCode === 404) {
+        errorMsg = 'Ce justificatif n\'existe pas ou a déjà été supprimé.';
+      }
+
+      showLocalToast({
+        type: 'error',
+        message: errorMsg,
+      });
+    }
+  };
+
   const handlePointage = async () => {
 
     setIsSubmittingPointage(true);
 
     try {
-      const position = await getPosition();
-      setCurrentPosition(position);
-
-      try {
-        const geo = await reverseGeocode(position.latitude, position.longitude);
-        setNomLieuAgent(geo?.nomLieu || null);
-      } catch {
-        setNomLieuAgent(null);
+      if (!currentPosition) {
+        throw new Error('Position GPS introuvable, réessaie le pointage.');
       }
 
       const response = await marquerPresence({
-        latitude: position.latitude,
-        longitude: position.longitude,
+        latitude: currentPosition.latitude,
+        longitude: currentPosition.longitude,
         typePresence: pointageType,
       });
 
@@ -772,9 +890,48 @@ function Dashboard({ user }) {
     }
   };
 
-  const openFaceVerificationBeforePointage = () => {
+  /*
+   * Étapes 1 et 2 du diagramme de séquence : vérifier d'abord
+   * si un pointage est possible (déjà marqué ? zone GPS
+   * autorisée ?) avant de demander la vérification faciale.
+   * La caméra ne s'ouvre que si ces deux conditions sont déjà
+   * remplies.
+   */
+  const openFaceVerificationBeforePointage = async () => {
 
-    setIsFaceVerificationOpen(true);
+    setIsSubmittingPointage(true);
+
+    try {
+      const position = await getPosition();
+      setCurrentPosition(position);
+
+      try {
+        const geo = await reverseGeocode(position.latitude, position.longitude);
+        setNomLieuAgent(geo?.nomLieu || null);
+      } catch {
+        setNomLieuAgent(null);
+      }
+
+      await verifierZone({
+        latitude: position.latitude,
+        longitude: position.longitude,
+        typePresence: pointageType,
+      });
+
+      /*
+       * On laisse isSubmittingPointage à true : le bouton reste
+       * désactivé pendant que la caméra est ouverte, jusqu'à la
+       * fin complète du flux (succès, échec facial ou fermeture).
+       */
+      setIsFaceVerificationOpen(true);
+    } catch (error) {
+      notifierAction(
+        setPointageFeedback,
+        'error',
+        error?.message || 'Impossible de vérifier la zone de pointage.'
+      );
+      setIsSubmittingPointage(false);
+    }
   };
 
   const handleMissionSubmit = async (event) => {
@@ -783,7 +940,8 @@ function Dashboard({ user }) {
     setIsSubmittingMission(true);
 
     try {
-      const response = await createChefMission(missionForm);
+      const payload = { ...missionForm, rayonKm: Number(missionForm.rayonKm) };
+      const response = await createChefMission(payload);
       setChefOperationsFeedback({
         type: 'success',
         message: response.message,
@@ -793,7 +951,8 @@ function Dashboard({ user }) {
         description: '',
         participantIds: [],
         echeance: '',
-        lieu: '', // <--- Ajoute ça ici aussi pour vider le champ
+        lieu: '',
+        rayonKm: '',
       });
       await loadChefOperations({ silent: true });
     } catch (error) {
@@ -812,7 +971,8 @@ function Dashboard({ user }) {
     setIsSubmittingReunion(true);
 
     try {
-      const response = await createChefReunion(reunionForm);
+      const payload = { ...reunionForm, rayonKm: Number(reunionForm.rayonKm) };
+      const response = await createChefReunion(payload);
       setChefOperationsFeedback({
         type: 'success',
         message: response.message,
@@ -821,6 +981,7 @@ function Dashboard({ user }) {
         titre: '',
         ordreDuJour: '',
         lieu: '',
+        rayonKm: '',
         dateReunion: '',
         participantIds: [],
       });
@@ -835,38 +996,32 @@ function Dashboard({ user }) {
     }
   };
 
-  const handleCalculerNoteAgent = async (agentId) => {
-    setIsCalculating((c) => ({ ...c, [agentId]: true }));
-    setNotesFeedback(null);
+  const handleSupprimerOperation = async (type, operation) => {
+    const libelle = type === 'mission' ? 'cette mission' : 'cette réunion';
+
+    if (!window.confirm(`Supprimer ${libelle} ? Les agents concernés en seront informés.`)) {
+      return;
+    }
+
+    setIsDeletingOperation(true);
+
     try {
-      await calculerNoteAutoChef(agentId, notesMois, notesAnnee);
-      await loadNotesChef({ silent: true });
-      showLocalToast({ type: 'success', message: 'Note automatique calculée.' });
-    } catch {
-      showLocalToast({ type: 'error', message: 'Erreur lors du calcul.' });
+      const result = type === 'mission'
+        ? await supprimerChefMission(operation.id)
+        : await supprimerChefReunion(operation.id);
+
+      showLocalToast({ type: 'success', message: result.message });
+      await loadChefOperations({ silent: true });
+    } catch (error) {
+      showLocalToast({
+        type: 'error',
+        message: error?.message || 'Suppression impossible.',
+      });
     } finally {
-      setIsCalculating((c) => ({ ...c, [agentId]: false }));
+      setIsDeletingOperation(false);
     }
   };
 
-  const handleNoterAgent = async (agentId) => {
-    const valeur = parseFloat(noteManuelleValues[agentId]);
-    if (isNaN(valeur) || valeur < 0 || valeur > 20) {
-      showLocalToast({ type: 'error', message: 'La note doit être entre 0 et 20.' });
-      return;
-    }
-    setIsNotingAgent((c) => ({ ...c, [agentId]: true }));
-    setNotesFeedback(null);
-    try {
-      await noterAgent(agentId, notesMois, notesAnnee, valeur);
-      await loadNotesChef({ silent: true });
-      showLocalToast({ type: 'success', message: 'Note manuelle enregistrée.' });
-    } catch {
-      showLocalToast({ type: 'error', message: 'Erreur lors de la saisie de la note.' });
-    } finally {
-      setIsNotingAgent((c) => ({ ...c, [agentId]: false }));
-    }
-  };
   const renderPresenceSummary = () => {
     if (!canPoint) {
       return null;
@@ -878,7 +1033,7 @@ function Dashboard({ user }) {
           <div>
             <h2>État de présence</h2>
             <p className="panel-note">
-              Le panneau se met à jour après chaque pointage et reflète le dernier statut reçu du backend.
+              Le panneau se met à jour après chaque pointage et reflète ton dernier statut enregistré.
             </p>
           </div>
           <span className={`presence-status-badge ${getPresenceBadgeClass(latestPresence?.statutPresence)}`}>
@@ -903,8 +1058,8 @@ function Dashboard({ user }) {
             <span>
               {currentPosition
                 ? nomLieuAgent
-                  ? `📍 ${nomLieuAgent} · ${formatDistanceLabel(calculateDistanceKm(currentPosition, MINISTRY_ZONE))}`
-                  : `${getGpsLabel()} · ${formatDistanceLabel(calculateDistanceKm(currentPosition, MINISTRY_ZONE))}`
+                  ? `📍 ${nomLieuAgent} · ${formatDistanceLabel(calculateDistanceKm(currentPosition, gpsConfig))}`
+                  : `${getGpsLabel()} · ${formatDistanceLabel(calculateDistanceKm(currentPosition, gpsConfig))}`
                 : 'La localisation sera capturée au moment du pointage.'}
             </span>
           </article>
@@ -926,22 +1081,21 @@ function Dashboard({ user }) {
           <h1>Bienvenue, {user?.role || 'role'} {user?.prenom || user?.nom || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
-
-        {renderPresenceSummary()}
       </section>
 
+      {renderPresenceSummary()}
     </>
   );
 
   const renderChefOverview = () => (
     <>
-      <section className="dashboard-hero-card agent-hero-card">
+      
         <div className="dashboard-hero-copy">
           <span className="dashboard-status-pill">{roleContent.subtitle}</span>
           <h1>Bienvenue,{user?.role || 'role'} {user?.prenom || user?.nom || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
-      </section>
+      
       {renderPresenceSummary()}
     </>
   );
@@ -952,8 +1106,7 @@ function Dashboard({ user }) {
         <div>
           <h2>Marquer présence</h2>
           <p className="panel-note">
-            La caméra vérifie d’abord ton visage. Ensuite le système capture ta position GPS et
-            valide la zone autorisée autour du Ministère.
+            Ta position GPS est d’abord vérifiée dans la zone autorisée, puis tu valides ton identité par reconnaissance faciale.
           </p>
         </div>
         <span className="dashboard-status-pill">Pointage personnel</span>
@@ -971,8 +1124,8 @@ function Dashboard({ user }) {
             <div>
               <strong>Carte GPS — Bénin</strong>
               <span>
-                {MINISTRY_ZONE.label} · périmètre autorisé{' '}
-                {MINISTRY_ZONE.radiusKm.toFixed(0)} km
+                {gpsConfig.nom} · périmètre autorisé{' '}
+                {gpsConfig.rayonKm.toFixed(0)} km
               </span>
             </div>
             <span className={`presence-status-badge ${currentPosition ? 'is-present' : 'is-gps'
@@ -983,7 +1136,10 @@ function Dashboard({ user }) {
 
           <PresenceMap
             userPosition={currentPosition}
-            rayonKm={MINISTRY_ZONE.radiusKm}
+            rayonKm={gpsConfig.rayonKm}
+            centerPosition={{ latitude: gpsConfig.latitude, longitude: gpsConfig.longitude }}
+            centerLabel={gpsConfig.nom}
+            userLocationName={nomLieuAgent}
           />
 
           <div className="gps-map-footer">
@@ -991,7 +1147,7 @@ function Dashboard({ user }) {
               <span>Distance au lieu autorisé</span>
               <strong>
                 {currentPosition
-                  ? `${calculateDistanceKm(currentPosition, MINISTRY_ZONE).toFixed(2)} km`
+                  ? `${calculateDistanceKm(currentPosition, gpsConfig).toFixed(2)} km`
                   : 'En attente'}
               </strong>
             </div>
@@ -1005,7 +1161,29 @@ function Dashboard({ user }) {
                     : '—'}
               </strong>
             </div>
+            <div>
+              <span>Précision de la position</span>
+              <strong>
+                {currentPosition?.accuracy
+                  ? `± ${Math.round(currentPosition.accuracy)} m`
+                  : '—'}
+              </strong>
+            </div>
           </div>
+
+          {/*
+            * Sans puce GPS, le navigateur localise par Wi-Fi ou par
+            * adresse IP : la position peut alors être fausse de
+            * plusieurs kilomètres. On le signale plutôt que de
+            * laisser croire à une mesure fiable.
+            */}
+          {currentPosition?.accuracy > 300 && (
+            <div className="form-error" style={{ marginTop: '10px' }}>
+              Position approximative (± {Math.round(currentPosition.accuracy)} m) : cet appareil
+              n'a pas de GPS et se localise par le réseau. Utilise un téléphone pour un
+              pointage fiable.
+            </div>
+          )}
         </article>
         <div className="agent-pointage-outer">
           <button
@@ -1014,19 +1192,11 @@ function Dashboard({ user }) {
             onClick={openFaceVerificationBeforePointage}
             disabled={isSubmittingPointage}
           >
-            <span className="agent-pointage-orb-icon">
-              <FingerprintIcon />
-              <MapPinIcon />
-            </span>
-            <strong>{isSubmittingPointage ? 'Pointage en cours...' : 'Vérifier puis pointer'}</strong>
-            <span>Visage + GPS · zone autorisée pour le pointage .</span>
+            <strong>{isSubmittingPointage ? 'Pointage en cours...' : 'Marquer votre présence'}</strong>
           </button>
 
           <div className="agent-pointage-statusline">
-            <span className={`presence-status-badge ${getPresenceBadgeClass(latestPresence?.statutPresence)}`}>
-              {latestPresence ? formatPresenceStatus(latestPresence.statutPresence) : 'Non pointé'}
-            </span>
-            <p>Le pointage passe d’abord par la vérification faciale.</p>
+            <p>Le pointage vérifie d’abord ta position GPS, puis ton visage.</p>
           </div>
         </div>
 
@@ -1034,30 +1204,52 @@ function Dashboard({ user }) {
 
 
 
-      <div className="admin-form-grid agent-pointage-form">
-        <label className="field-input-wrap field-input-wrap-plain">
-          <select value={pointageType} onChange={(event) => setPointageType(event.target.value)}>
-            <option value="BUREAU">Bureau</option>
-            <option value="MISSION">Mission</option>
-            <option value="REUNION">Réunion</option>
-          </select>
-        </label>
-
-        <div className="admin-form-actions">
-          <button type="button" className="secondary-button" onClick={goToHistory}>
-            Voir l’historique
-          </button>
+      {/*
+        * Le type de pointage n'est plus choisi : il découle du
+        * planning du jour. L'agent voit ce qui s'applique et
+        * pourquoi, sans pouvoir se tromper de lieu de référence.
+        */}
+      <div className="pointage-contexte">
+        <div>
+          <span>Type de pointage</span>
+          <strong>{formatPresenceType(contextePointage?.typePresence || 'BUREAU')}</strong>
         </div>
+        <div>
+          <span>Lieu de référence</span>
+          <strong>{contextePointage?.nomLieu || gpsConfig.nom}</strong>
+        </div>
+        <div>
+          <span>Rayon autorisé</span>
+          <strong>
+            {contextePointage?.rayonKm != null
+              ? `${contextePointage.rayonKm} km`
+              : `${gpsConfig.rayonKm} km`}
+          </strong>
+        </div>
+      </div>
+
+      {contextePointage?.motif && (
+        <p className="pointage-contexte-motif">
+          {contextePointage.typePresence === 'MISSION' ? 'Mission' : 'Réunion'} du jour :
+          <strong> {contextePointage.motif}</strong>. Ton lieu de référence est celui fixé par
+          ton chef de service, et redeviendra le lieu habituel demain.
+        </p>
+      )}
+
+      <div className="admin-form-actions" style={{ marginTop: '12px' }}>
+        <button type="button" className="secondary-button" onClick={goToHistory}>
+          Voir l’historique
+        </button>
       </div>
     </section>
   );
 
   const renderHistoryPanel = ({
     title = 'Historique de présence',
-    note = 'Consulte tes pointages enregistrés par le backend.',
+    note = 'Consulte l’ensemble de tes pointages enregistrés.',
     badgeLabel = `${history.length} entrée(s)`,
     emptyTitle = 'Aucune présence enregistrée',
-    emptyMessage = 'Le premier pointage apparaîtra ici après validation du backend.',
+    emptyMessage = 'Ton premier pointage apparaîtra ici une fois enregistré.',
     includeAnalytics = false,
   } = {}) => (
     <section className="dashboard-panel dashboard-panel-wide">
@@ -1070,13 +1262,13 @@ function Dashboard({ user }) {
       </div>
 
       {historyFeedback && historyFeedback.type === 'error' && <div className="form-error">{historyFeedback.message}</div>}
-
+ 
       {includeAnalytics && (
         <div className="chef-metrics-grid">
           <article className="dashboard-stat-card chef-metric-card">
             <span>Pointages</span>
             <strong>{history.length}</strong>
-            <p>Enregistrements personnels disponibles dans le backend.</p>
+            <p>Nombre total de tes pointages enregistrés.</p>
           </article>
 
           <article className="dashboard-stat-card chef-metric-card">
@@ -1093,7 +1285,7 @@ function Dashboard({ user }) {
 
           <article className="dashboard-stat-card chef-metric-card">
             <span>GPS ministère</span>
-            <strong>{currentPosition ? formatDistanceLabel(calculateDistanceKm(currentPosition, MINISTRY_ZONE)) : 'Position en attente'}</strong>
+            <strong>{currentPosition ? formatDistanceLabel(calculateDistanceKm(currentPosition, gpsConfig)) : 'Position en attente'}</strong>
             <p>La zone cible reste alignée sur le ministère et son périmètre autorisé.</p>
           </article>
         </div>
@@ -1134,7 +1326,7 @@ function Dashboard({ user }) {
                   </td>
                   <td>
                     <strong>Position vérifiée</strong>
-                    <div className="table-subnote">Coordonnées utilisées par le backend pour la zone autorisée.</div>
+                    <div className="table-subnote">Coordonnées du centre de la zone de pointage autorisée.</div>
                   </td>
                 </tr>
               ))}
@@ -1151,7 +1343,7 @@ function Dashboard({ user }) {
         <div>
           <h2>Demandes et justificatifs</h2>
           <p className="panel-note">
-            Dépose une demande, consulte l’historique des justificatifs et suis les retours du backend.
+            Dépose une demande, consulte l’historique des justificatifs
           </p>
         </div>
         <span className="dashboard-status-pill">Dossier agent</span>
@@ -1168,7 +1360,6 @@ function Dashboard({ user }) {
           <div className="admin-section-head">
             <div>
               <h2>Nouvelle demande</h2>
-              <p className="panel-note">Prépare une permission ou un justificatif à envoyer au backend.</p>
             </div>
             <span className="dashboard-status-pill">Soumission</span>
           </div>
@@ -1242,7 +1433,6 @@ function Dashboard({ user }) {
           <div className="admin-section-head">
             <div>
               <h2>Mes justificatifs</h2>
-              <p className="panel-note">Historique des demandes déjà déposées et leur statut.</p>
             </div>
             <span className="dashboard-status-pill">
               {agentJustificatifs.length} entrée(s)
@@ -1257,7 +1447,6 @@ function Dashboard({ user }) {
           ) : agentJustificatifs.length === 0 ? (
             <div className="dashboard-placeholder dashboard-placeholder-muted">
               <strong>Aucun justificatif pour l’instant</strong>
-              <span>Les demandes transmises au backend apparaîtront ici dès qu’elles seront disponibles.</span>
             </div>
           ) : (
             <div className="agent-justificatifs-list">
@@ -1271,21 +1460,75 @@ function Dashboard({ user }) {
                     : status === 'REFUSE'
                       ? 'is-late'
                       : 'is-gps';
+                const statusLabel =
+                  status === 'ACCEPTE'
+                    ? 'Accepté'
+                    : status === 'REFUSE'
+                      ? 'Refusé'
+                      : 'En attente';
+                const periode = formatPeriode(item.dateDebut, item.dateFin);
+                const chefServiceNom = monChefService
+                  ? [monChefService.prenom, monChefService.nom].filter(Boolean).join(' ')
+                  : '';
 
                 return (
-                  <article key={item.id ?? `${label}-${index}`} className="dashboard-placeholder dashboard-placeholder-muted">
-                    <strong>{label}</strong>
-                    <span>{item.motif || item.description || 'Demande transmise au service.'}</span>
-                    <div className="table-subnote">{formatDateTime(dateValue)}</div>
-                    <div className="admin-row-actions">
+                  <article key={item.id ?? `${label}-${index}`} className="agent-justificatif-card">
+                    <button
+                      type="button"
+                      className="agent-justificatif-delete-btn"
+                      onClick={() => handleDeleteJustificatif(item.id)}
+                      title="Supprimer ce justificatif"
+                    >
+                      ✕
+                    </button>
+
+                    <div className="agent-justificatif-header">
+                      <strong>{label}</strong>
                       <span className={`presence-status-badge ${badgeClass}`}>
-                        {status === 'ACCEPTE'
-                          ? 'Accepté'
-                          : status === 'REFUSE'
-                            ? 'Refusé'
-                            : 'En attente'}
+                        {statusLabel}
                       </span>
                     </div>
+
+                    <div className="agent-justificatif-info-chef">
+                      <div className="agent-justificatif-info-chef-label">Envoyé à</div>
+                      <div style={{ fontWeight: 500 }}>
+                        {chefServiceNom || 'Chef de service'}
+                      </div>
+                    </div>
+
+                    <div className="agent-justificatif-row">
+                      {formatDateTime(dateValue) !== '—' && (
+                        <div className="agent-justificatif-info">
+                          <span className="agent-justificatif-info-label">Créé le</span>
+                          <span className="agent-justificatif-info-value">
+                            {formatDateTime(dateValue)}
+                          </span>
+                        </div>
+                      )}
+
+                      {periode !== '—' && (
+                        <div className="agent-justificatif-periode">
+                          <div className="agent-justificatif-periode-label">Période</div>
+                          <div className="agent-justificatif-periode-value">
+                            {periode}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {(item.motif || item.description) && (
+                      <div className="agent-justificatif-motif">
+                        <div className="agent-justificatif-motif-label">Motif</div>
+                        {item.motif || item.description}
+                      </div>
+                    )}
+
+                    {status === 'REFUSE' && item.motifRefus && (
+                      <div className="agent-justificatif-refus">
+                        <div className="agent-justificatif-refus-label">❌ Motif du refus</div>
+                        {item.motifRefus}
+                      </div>
+                    )}
                   </article>
                 );
               })}
@@ -1327,7 +1570,7 @@ function Dashboard({ user }) {
 
         <article className="dashboard-stat-card chef-metric-card">
           <span>Dernière synchronisation</span>
-          <strong>{chefPresences.length ? 'OK' : 'Backend'}</strong>
+          <strong>{chefPresences.length ? 'OK' : 'En attente'}</strong>
           <p>La Mise à jour du système est automatique</p>
         </article>
       </div>
@@ -1339,10 +1582,9 @@ function Dashboard({ user }) {
         </div>
       ) : chefPresences.length === 0 ? (
         <div className="dashboard-placeholder dashboard-placeholder-muted">
-          <strong>Consultation des présences</strong>
+          <strong>Aucune présence enregistrée</strong>
           <span>
-            La route backend des présences agents doit renvoyer la liste du service pour activer complètement cette
-            vue.
+            Les pointages des agents de ton service apparaîtront ici dès qu’ils auront commencé à pointer.
           </span>
         </div>
       ) : (
@@ -1403,6 +1645,44 @@ function Dashboard({ user }) {
         </div>
       )}
     </section>
+  );
+
+  /*
+   * Champs lieu + rayon réutilisables pour Mission/Réunion : le
+   * chef de service saisit simplement un lieu en texte libre et
+   * un rayon d'autorisation en km. Les coordonnées GPS du lieu
+   * sont résolues côté backend, pour que le pointage en
+   * mission/réunion sache vérifier la bonne zone ce jour-là.
+   */
+  const renderLieuField = (form, setForm, libelle) => (
+    <>
+      <label className="field-input-wrap field-input-wrap-plain">
+        <input
+          type="text"
+          value={form.lieu || ''}
+          placeholder={`Lieu de la ${libelle}...`}
+          required
+          onChange={(e) => {
+            const newValue = e.target.value;
+            setForm((current) => ({ ...current, lieu: newValue }));
+          }}
+        />
+      </label>
+      <label className="field-input-wrap field-input-wrap-plain">
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          value={form.rayonKm}
+          placeholder="Rayon d'autorisation (km)"
+          required
+          onChange={(e) => {
+            const newValue = e.target.value;
+            setForm((current) => ({ ...current, rayonKm: newValue }));
+          }}
+        />
+      </label>
+    </>
   );
 
   const renderParticipantSelector = (selectedIds, setForm) => (
@@ -1480,6 +1760,7 @@ function Dashboard({ user }) {
 
 
   <div className="operations-accordion">
+  <div className="operation-bloc">
   <button
     type="button"
     className="operation-toggle"
@@ -1497,36 +1778,24 @@ function Dashboard({ user }) {
   </button>
 
   {operationOuverte === 'mission' && (
-    /* ICI : ton article/formulaire Mission actuel */
           <form className="chef-form" onSubmit={handleMissionSubmit}>
-            <div className="chef-form-grid-two">
-              <label className="field-input-wrap field-input-wrap-plain">
-                <input
-                  type="text"
-                  value={missionForm.titre}
-                  onChange={(event) => setMissionForm((current) => ({ ...current, titre: event.target.value }))}
-                  placeholder="Titre de la mission"
-                  required
-                />
-              </label>
+            <label className="field-input-wrap field-input-wrap-plain">
+              <input
+                type="text"
+                value={missionForm.titre}
+                onChange={(event) => setMissionForm((current) => ({ ...current, titre: event.target.value }))}
+                placeholder="Titre de la mission"
+                required
+              />
+            </label>
 
-              {renderParticipantSelector(
-                missionForm.participantIds,
-                setMissionForm
-              )}
-            </div>
+            {renderParticipantSelector(
+              missionForm.participantIds,
+              setMissionForm
+            )}
 
             <div className="chef-form-grid-two">
-              {/* AJOUT DU CHAMP LIEU POUR LA MISSION */}
-              <label className="field-input-wrap field-input-wrap-plain">
-                <input
-                  type="text"
-                  value={missionForm.lieu || ''}
-                  onChange={(event) => setMissionForm((current) => ({ ...current, lieu: event.target.value }))}
-                  placeholder="Lieu de la mission"
-                  required
-                />
-              </label>
+              {renderLieuField(missionForm, setMissionForm, 'mission')}
 
               <label className="field-input-wrap field-input-wrap-plain">
                 <input
@@ -1553,10 +1822,10 @@ function Dashboard({ user }) {
               </button>
             </div>
           </form>
-        
   )}
+  </div>
 
-
+  <div className="operation-bloc">
   <button
     type="button"
     className="operation-toggle"
@@ -1591,15 +1860,7 @@ function Dashboard({ user }) {
             )}
 
             <div className="chef-form-grid-two">
-              <label className="field-input-wrap field-input-wrap-plain">
-                <input
-                  type="text"
-                  value={reunionForm.lieu}
-                  onChange={(event) => setReunionForm((current) => ({ ...current, lieu: event.target.value }))}
-                  placeholder="Lieu de la réunion"
-                  required
-                />
-              </label>
+              {renderLieuField(reunionForm, setReunionForm, 'réunion')}
 
               <label className="field-input-wrap field-input-wrap-plain">
                 <input
@@ -1627,22 +1888,70 @@ function Dashboard({ user }) {
             </div>
           </form>
   )}
+  </div>
 
 </div>
 
       <div className="chef-operations-grid">
-        {/* COLONNE MISSION */}
-        
+        <article className="dashboard-placeholder">
+          <strong>Missions créées ({chefMissions.length})</strong>
+          {chefMissions.length === 0 ? (
+            <span>Aucune mission enregistrée pour le moment.</span>
+          ) : (
+            <ul className="operation-list">
+              {chefMissions.map((mission) => (
+                <li key={mission.id}>
+                  <div className="operation-list-head">
+                    <strong>{mission.titre}</strong>
+                    <button
+                      type="button"
+                      className="admin-mini-button admin-mini-button-danger"
+                      onClick={() => handleSupprimerOperation('mission', mission)}
+                      disabled={isDeletingOperation}
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                  <span>
+                    {formatDateTime(mission.dateMission)}
+                    {mission.lieu ? ` · ${mission.lieu}` : ''}
+                    {` · ${mission.participants?.length ?? 0} agent(s)`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
 
-        {/* COLONNE REUNION */}
-        
-      </div>
-
-      <div className="dashboard-placeholder dashboard-placeholder-muted">
-        <strong>Confirmation d'envoi</strong>
-        <span>
-          Dès validation du formulaire, le système lève un Toast de succès et envoie immédiatement une notification Push/Menu aux collaborateurs assignés.
-        </span>
+        <article className="dashboard-placeholder">
+          <strong>Réunions créées ({chefReunions.length})</strong>
+          {chefReunions.length === 0 ? (
+            <span>Aucune réunion enregistrée pour le moment.</span>
+          ) : (
+            <ul className="operation-list">
+              {chefReunions.map((reunion) => (
+                <li key={reunion.id}>
+                  <div className="operation-list-head">
+                    <strong>{reunion.titre}</strong>
+                    <button
+                      type="button"
+                      className="admin-mini-button admin-mini-button-danger"
+                      onClick={() => handleSupprimerOperation('reunion', reunion)}
+                      disabled={isDeletingOperation}
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                  <span>
+                    {formatDateTime(reunion.dateReunion)}
+                    {reunion.lieu ? ` · ${reunion.lieu}` : ''}
+                    {` · ${reunion.participants?.length ?? 0} agent(s)`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
       </div>
     </section>
   );
@@ -1739,13 +2048,26 @@ function Dashboard({ user }) {
                       👤 {name}
                     </span>
                     <span className="chef-justificatif-date">
-                      📅 {formatDateTime(dateValue)}
+                      📅 Créé le {formatDateTime(dateValue)}
                     </span>
-                    {item.description && (
-                      <p className="chef-justificatif-description">{item.description}</p>
+                    {formatPeriode(item.dateDebut, item.dateFin) !== '—' && (
+                      <span className="chef-justificatif-date">
+                        📋 Période: {formatPeriode(item.dateDebut, item.dateFin)}
+                      </span>
+                    )}
+                    {(item.description || item.motif) && (
+                      <p className="chef-justificatif-description">
+                        <strong style={{ display: 'block', marginBottom: '4px', fontSize: '0.82rem', color: '#7a8a7a', textTransform: 'uppercase' }}>
+                          Motif
+                        </strong>
+                        {item.description || item.motif}
+                      </p>
                     )}
                     {item.motifRefus && (
-                      <p className="chef-justificatif-refus">❌ Motif : {item.motifRefus}</p>
+                      <p className="chef-justificatif-refus">
+                        <strong style={{ display: 'block', marginBottom: '4px' }}>❌ Motif du refus</strong>
+                        {item.motifRefus}
+                      </p>
                     )}
                   </div>
                   {isEnAttente && (
@@ -1780,8 +2102,8 @@ function Dashboard({ user }) {
         <div>
           <h2>Notes & classement</h2>
           <p className="panel-note">
-            Calculez la note automatique de vos agents, saisissez votre note manuelle
-            et obtenez le score final. Le classement se met à jour automatiquement.
+            Les notes de vos agents sont calculées automatiquement à partir de leur
+            score de ponctualité. Le classement du service se met à jour tout seul.
           </p>
         </div>
         <span className="dashboard-status-pill">Évaluation</span>
@@ -1848,10 +2170,7 @@ function Dashboard({ user }) {
               <thead>
                 <tr>
                   <th>Agent</th>
-                  <th>Note auto /20</th>
-                  <th>Note manuelle /20</th>
-                  <th>Score final /20</th>
-                  <th>Actions</th>
+                  <th>Note automatique /20</th>
                 </tr>
               </thead>
               <tbody>
@@ -1864,50 +2183,8 @@ function Dashboard({ user }) {
                       <td><strong>{nom}</strong></td>
                       <td>
                         {n.noteAutomatique != null
-                          ? `${n.noteAutomatique}/20`
+                          ? `${n.noteAutomatique.toFixed(2)}/20`
                           : '—'}
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min="0"
-                          max="20"
-                          step="0.5"
-                          value={noteManuelleValues[agentId] ?? ''}
-                          onChange={(e) => setNoteManuelleValues((c) => ({
-                            ...c,
-                            [agentId]: e.target.value,
-                          }))}
-                          placeholder="0 à 20"
-                          style={{ width: '80px', padding: '4px 8px', borderRadius: '6px', border: '1px solid #ddd' }}
-                        />
-                      </td>
-                      <td>
-                        {n.scoreFinal != null ? (
-                          <strong style={{ color: '#1e5131' }}>{n.scoreFinal}/20</strong>
-                        ) : '—'}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            style={{ fontSize: '12px', padding: '5px 10px' }}
-                            onClick={() => handleCalculerNoteAgent(agentId)}
-                            disabled={isCalculating[agentId]}
-                          >
-                            {isCalculating[agentId] ? '...' : '⚙️ Note auto'}
-                          </button>
-                          <button
-                            type="button"
-                            className="primary-button"
-                            style={{ fontSize: '12px', padding: '5px 10px' }}
-                            onClick={() => handleNoterAgent(agentId)}
-                            disabled={isNotingAgent[agentId]}
-                          >
-                            {isNotingAgent[agentId] ? '...' : '✏️ Enregistrer'}
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   );
@@ -1928,14 +2205,14 @@ function Dashboard({ user }) {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {[...classementAgents]
-              .filter((n) => n.scoreFinal != null)
-              .sort((a, b) => b.scoreFinal - a.scoreFinal)
+              .filter((n) => n.noteAutomatique != null)
+              .sort((a, b) => b.noteAutomatique - a.noteAutomatique)
               .map((n, index) => {
                 const nom = [n.utilisateur?.prenom, n.utilisateur?.nom]
                   .filter(Boolean).join(' ') || '—';
                 const medals = ['🥇', '🥈', '🥉'];
                 const medal = medals[index] ?? `${index + 1}.`;
-                const pct = (n.scoreFinal / 20) * 100;
+                const pct = (n.noteAutomatique / 20) * 100;
                 return (
                   <div
                     key={n.utilisateur?.id}
@@ -1975,49 +2252,21 @@ function Dashboard({ user }) {
                       minWidth: '52px',
                       textAlign: 'right',
                     }}>
-                      {n.scoreFinal}/20
+                      {n.noteAutomatique.toFixed(2)}/20
                     </span>
                   </div>
                 );
               })}
-            {classementAgents.filter((n) => n.scoreFinal != null).length === 0 && (
+            {classementAgents.filter((n) => n.noteAutomatique != null).length === 0 && (
               <div className="dashboard-placeholder dashboard-placeholder-muted">
                 <strong>Classement indisponible</strong>
-                <span>Le classement apparaît dès que les scores finaux sont calculés.</span>
+                <span>Le classement apparaît dès que les notes automatiques du mois sont calculées.</span>
               </div>
             )}
           </div>
         </>
       )}
 
-      {/* Agents sans note encore — boutons calculer rapide */}
-      {agentsDuService.filter((a) =>
-        !classementAgents.find((n) => n.utilisateur?.id === a.id)
-      ).length > 0 && (
-          <div style={{ marginTop: '24px' }}>
-            <p style={{ fontSize: '13px', color: '#888', marginBottom: '10px' }}>
-              Agents sans note pour ce mois — cliquez pour calculer leur note automatique :
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {agentsDuService
-                .filter((a) => !classementAgents.find((n) => n.utilisateur?.id === a.id))
-                .map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    className="secondary-button"
-                    style={{ fontSize: '12px', padding: '6px 12px' }}
-                    onClick={() => handleCalculerNoteAgent(a.id)}
-                    disabled={isCalculating[a.id]}
-                  >
-                    {isCalculating[a.id]
-                      ? '...'
-                      : `⚙️ ${[a.prenom, a.nom].filter(Boolean).join(' ')}`}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
     </section>
   );
 
@@ -2056,7 +2305,7 @@ function Dashboard({ user }) {
         {isLoadingAnalysesIA ? (
           <div className="dashboard-placeholder" style={{ marginTop: '16px' }}>
             <strong>Chargement de votre analyse</strong>
-            <span>Connexion au backend en cours...</span>
+            <span>Chargement des données en cours...</span>
           </div>
         ) : !analyseDuJour ? (
           <div className="dashboard-placeholder dashboard-placeholder-muted" style={{ marginTop: '16px' }}>
@@ -2097,7 +2346,78 @@ function Dashboard({ user }) {
             </div>
           </>
         )}
+
+        {renderClassementCard()}
       </section>
+    );
+  };
+
+  /*
+   * Classement de l'utilisateur : parmi les membres de son service
+   * pour un agent, parmi les chefs de service pour un chef. La ligne
+   * de l'utilisateur connecté est mise en évidence.
+   */
+  const renderClassementCard = () => {
+    const estChef = roleKey === 'CHEF_SERVICE';
+
+    const titre = estChef
+      ? 'Classement des chefs de service'
+      : 'Mon classement dans le service';
+
+    /*
+     * Un chef est classe sur son score final : le Directeur lui
+     * attribue une note manuelle qui se combine a sa note
+     * automatique. Un agent n'est evalue que par sa note
+     * automatique — personne ne le note a la main. La valeur
+     * affichee est donc exactement celle qui a servi au tri
+     * cote serveur.
+     */
+    const note = (entree) =>
+      (estChef
+        ? entree?.scoreFinal ?? entree?.noteAutomatique
+        : entree?.noteAutomatique) ?? null;
+
+    return (
+      <div className="dashboard-placeholder" style={{ marginTop: '18px' }}>
+        <strong>{titre}</strong>
+        <p className="panel-note">
+          {estChef
+            ? 'Position de chaque chef de service selon son score final (note automatique et note du Directeur).'
+            : 'Position de chaque membre du service selon sa note automatique de ponctualité.'}
+        </p>
+
+        {isLoadingClassement ? (
+          <span>Chargement du classement...</span>
+        ) : classement.length === 0 ? (
+          <span>Le classement apparaîtra dès que les notes seront disponibles.</span>
+        ) : (
+          <ol className="classement-list">
+            {classement.map((entree, index) => {
+              const estMoi = entree?.utilisateur?.id === user?.id;
+              const valeur = note(entree);
+
+              return (
+                <li
+                  key={entree.id ?? index}
+                  className={estMoi ? 'classement-item classement-item-moi' : 'classement-item'}
+                >
+                  <span className="classement-rang">{index + 1}</span>
+                  <span className="classement-nom">
+                    {estMoi
+                      ? 'Moi'
+                      : [entree?.utilisateur?.nom, entree?.utilisateur?.prenom]
+                          .filter(Boolean)
+                          .join(' ') || 'Utilisateur'}
+                  </span>
+                  <span className="classement-note">
+                    {valeur == null ? '—' : `${valeur.toFixed(2)}/20`}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </div>
     );
   };
 
@@ -2366,10 +2686,10 @@ function Dashboard({ user }) {
       return (
         <section className="dashboard-panel dashboard-panel-wide">
           <h2>{activeItem.label}</h2>
-          <p className="panel-note">Cette section sera connectée aux vraies données backend dans l’étape suivante.</p>
+          <p className="panel-note">Cette section n’est pas encore disponible.</p>
           <div className="dashboard-placeholder">
-            <strong>Module à brancher</strong>
-            <span>La structure est prête pour les appels API et les écrans métier.</span>
+            <strong>Module indisponible</strong>
+            <span>Le contenu de cette rubrique sera ajouté prochainement.</span>
           </div>
         </section>
       );
@@ -2382,13 +2702,11 @@ function Dashboard({ user }) {
           <p className="panel-note">Vue réservée à la supervision et au reporting, sans données simulées.</p>
           <div className="dashboard-placeholder dashboard-placeholder-muted">
             <strong>Vue de contrôle</strong>
-            <span>Les tableaux et indicateurs arriveront après connexion au backend.</span>
+            <span>Les tableaux et indicateurs de cette vue seront ajoutés prochainement.</span>
           </div>
         </section>
       );
     }
-
-    console.log(user);
 
     return (
       <section className="dashboard-hero-card">
@@ -2445,7 +2763,7 @@ function Dashboard({ user }) {
         </button>
 
         <Sidebar role={roleKey} activePage={activePage}
-          onChangePage={setActivePage} items={roleContent.items} user={user} onLogout={logout} />
+          onChangePage={handlePageChange} items={roleContent.items} user={user} onLogout={logout} />
       </div>
 
       {sidebarOpen && (
@@ -2458,7 +2776,16 @@ function Dashboard({ user }) {
 
       <main className="dashboard-main dashboard-main-clean">
         <div className="dashboard-topbar">
-          <div />
+          <button
+            type="button"
+            className="dashboard-menu-btn"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Ouvrir le menu"
+            aria-expanded={sidebarOpen}
+          >
+            ☰
+          </button>
+
           <div className="dashboard-topbar-actions">
             <span className="app-user-chip">{user?.role || roleKey}</span>
             <button
@@ -2476,7 +2803,7 @@ function Dashboard({ user }) {
             <button
               type="button"
               className="nav-profile-button"
-              onClick={() => setActivePage('parametres')}
+              onClick={() => handlePageChange('parametres')}
               aria-label="Ouvrir mon profil"
               title="Ouvrir mon profil"
             >
@@ -2518,7 +2845,7 @@ function Dashboard({ user }) {
         {renderBody()}
 
         <button
-          className="dashboard-menu-btn"
+          className="dashboard-menu-btn dashboard-menu-btn-legacy"
           onClick={() => setSidebarOpen(true)}
         >
           ☰
@@ -2530,6 +2857,7 @@ function Dashboard({ user }) {
         userName={user?.nom || 'agent'}
         onClose={() => {
           setIsFaceVerificationOpen(false);
+          setIsSubmittingPointage(false);
           showLocalToast({
             type: 'error',
             message: 'La vérification faciale est obligatoire avant le pointage.',

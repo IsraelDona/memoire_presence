@@ -3,20 +3,19 @@ import Sidebar from '../../components/layout/Sidebar';
 import { useAuth } from '../../context/AuthContext';
 import { normalizeRole } from '../../services/authService';
 import {
-  creerChefService, fetchDemandesComptes, fetchStatistiquesGlobales,
-  traiterDemandeCompte,
+  creerChefService, fetchDemandesComptes,
+  traiterDemandeCompte, fetchTousLesAgents, affecterAgentAService,
+  mettreAJourInfosAgent, fetchHistoriqueAffectations,
+  fetchJoursFeries, declarerJourFerie, supprimerJourFerie,
 } from '../../services/adminService';
 import Notifications from '../../components/notifications/Notifications';
 import { updateMonProfil } from '../../services/profilService';
-import { getZoneGps, updateZoneGps } from '../../services/gpsService';
+import PhotoUploadInput from '../../components/profil/PhotoUploadInput';
+import { getGpsConfig, updateGpsConfig, getLieuByName } from '../../services/gpsConfigService';
 
 import useNotificationsPolling from '../../hooks/useNotificationsPolling';
 import NotificationToast from '../../components/notifications/NotificationToast';
 
-import {
-  PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-} from 'recharts';
 import { fetchServices } from '../../services/authService';
 import PdfDashboard from '../../components/pdf/PdfDashboard';
 import {
@@ -41,9 +40,9 @@ const ADMIN_ITEMS = [
   { key: 'overview', label: 'Vue générale', icon: 'grid' },
   { key: 'requests', label: 'Demandes comptes', icon: 'check' },
   { key: 'create', label: 'Créer chef service', icon: 'document' },
+  { key: 'affectation', label: 'Affecter au service', icon: 'check' },
   { key: 'logs', label: 'Journaux système', icon: 'report' },
   { key: 'pdf', label: 'Rapports PDF', icon: 'document' },
-  { key: 'notes', label: 'Notes & classement', icon: 'report' },
   { key: 'parametres', label: 'Paramètres', icon: 'settings' },
 ];
 
@@ -65,11 +64,24 @@ function getFullName(user) {
   return [user?.nom, user?.prenom].filter(Boolean).join(' ').trim() || 'Utilisateur';
 }
 
+function formatDateCourte(valeur) {
+  if (!valeur) {
+    return '—';
+  }
+
+  const date = new Date(valeur);
+
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 
 
 function AdminDashboard() {
   const { user, logout, updateUser } = useAuth();
   const [activePage, setActivePage] = useState('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [demandes, setDemandes] = useState([]);
   const [isLoadingDemandes, setIsLoadingDemandes] = useState(false);
   const [busyAction, setBusyAction] = useState(null);
@@ -77,9 +89,7 @@ function AdminDashboard() {
   const [isCreatingChef, setIsCreatingChef] = useState(false);
   const [requestsFeedback, setRequestsFeedback] = useState(null);
   const [chefFeedback, setChefFeedback] = useState(null);
-  const [stats, setStats] = useState(null);
   const [services, setServices] = useState([]);
-  const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const {
@@ -121,9 +131,26 @@ function AdminDashboard() {
   const [noteManuelleChefs, setNoteManuelleChefs] = useState({});
   const [isCalculatingAdmin, setIsCalculatingAdmin] = useState({});
   const [isNotingChef, setIsNotingChef] = useState({});
-  const [chefsList, setChefsList] = useState([]);
 
 const [logs, setLogs] = useState([]);
+const [logSearchQuery, setLogSearchQuery] = useState('');
+const [logCategorieFilter, setLogCategorieFilter] = useState('Toutes les catégories');
+const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+const [agentsList, setAgentsList] = useState([]);
+const [isLoadingAgents, setIsLoadingAgents] = useState(false);
+const [selectedAgentId, setSelectedAgentId] = useState('');
+const [selectedServiceId, setSelectedServiceId] = useState('');
+const [isAffecting, setIsAffecting] = useState(false);
+const [affectationFeedback, setAffectationFeedback] = useState(null);
+const [infosAgentForm, setInfosAgentForm] = useState({ matricule: '', poste: '', grade: '' });
+const [isSavingInfos, setIsSavingInfos] = useState(false);
+const [infosFeedback, setInfosFeedback] = useState(null);
+const [historiqueAffectations, setHistoriqueAffectations] = useState([]);
+const [joursFeries, setJoursFeries] = useState([]);
+const [ferieForm, setFerieForm] = useState({ date: '', libelle: '' });
+const [isSavingFerie, setIsSavingFerie] = useState(false);
+const [ferieFeedback, setFerieFeedback] = useState(null);
 
 
 const showLocalToast = ({ type, message }) => {
@@ -136,6 +163,11 @@ const showLocalToast = ({ type, message }) => {
     localToastRef.current = null;
   }, 5000);
 };
+
+  const handlePageChange = (page) => {
+    setActivePage(page);
+    setSidebarOpen(false);
+  };
 
   const notifierAction = (setFeedbackFn, type, message) => {
     setFeedbackFn({ type, message });
@@ -173,11 +205,14 @@ const showLocalToast = ({ type, message }) => {
     }
   }, []);
   const loadJournaux = async () => {
+  setIsLoadingLogs(true);
   try {
     const data = await fetchJournaux();
     setLogs(data);
   } catch (error) {
     console.error("Erreur lors du chargement des journaux :", error);
+  } finally {
+    setIsLoadingLogs(false);
   }
 };
 useEffect(() => {
@@ -186,18 +221,155 @@ useEffect(() => {
   }
 }, [activePage]);
 
-  const chargerStatistiques = useCallback(async () => {
-    setIsLoadingStats(true);
+const loadAgents = async () => {
+  setIsLoadingAgents(true);
+  try {
+    const data = await fetchTousLesAgents();
+    setAgentsList(data);
+  } catch (error) {
+    console.error("Erreur lors du chargement des agents :", error);
+  } finally {
+    setIsLoadingAgents(false);
+  }
+};
+useEffect(() => {
+  if (activePage === "affectation") {
+    loadAgents();
+  }
+}, [activePage]);
 
-    try {
-      const data = await fetchStatistiquesGlobales();
-      setStats(data);
-    } catch (error) {
-      console.error('Erreur lors du chargement des statistiques:', error);
-    } finally {
-      setIsLoadingStats(false);
-    }
-  }, []);
+const handleAffecterService = async (event) => {
+  event.preventDefault();
+  setAffectationFeedback(null);
+
+  if (!selectedAgentId || !selectedServiceId) {
+    setAffectationFeedback({
+      type: 'error',
+      message: 'Sélectionne un agent et un service.',
+    });
+    return;
+  }
+
+  setIsAffecting(true);
+
+  try {
+    const result = await affecterAgentAService({
+      agentId: Number(selectedAgentId),
+      serviceId: Number(selectedServiceId),
+    });
+
+    notifierAction(setAffectationFeedback, 'success', result.message);
+    setSelectedAgentId('');
+    setSelectedServiceId('');
+    await loadAgents();
+  } catch (error) {
+    notifierAction(
+      setAffectationFeedback,
+      'error',
+      error?.message || "Impossible d'affecter l'agent."
+    );
+  } finally {
+    setIsAffecting(false);
+  }
+};
+
+const loadJoursFeries = async () => {
+  try {
+    setJoursFeries(await fetchJoursFeries());
+  } catch {
+    setJoursFeries([]);
+  }
+};
+
+const handleDeclarerJourFerie = async (event) => {
+  event.preventDefault();
+  setFerieFeedback(null);
+  setIsSavingFerie(true);
+
+  try {
+    const result = await declarerJourFerie(ferieForm);
+    notifierAction(setFerieFeedback, 'success', result.message);
+    setFerieForm({ date: '', libelle: '' });
+    await loadJoursFeries();
+  } catch (error) {
+    notifierAction(
+      setFerieFeedback,
+      'error',
+      error?.message || "Impossible d'enregistrer ce jour férié."
+    );
+  } finally {
+    setIsSavingFerie(false);
+  }
+};
+
+const handleSupprimerJourFerie = async (jour) => {
+  if (!window.confirm(`Retirer « ${jour.libelle} » des jours fériés ?`)) {
+    return;
+  }
+
+  try {
+    const result = await supprimerJourFerie(jour.id);
+    notifierAction(setFerieFeedback, 'success', result.message);
+    await loadJoursFeries();
+  } catch (error) {
+    notifierAction(
+      setFerieFeedback,
+      'error',
+      error?.message || 'Suppression impossible.'
+    );
+  }
+};
+
+const handleInfosAgentSubmit = async (event) => {
+  event.preventDefault();
+  setInfosFeedback(null);
+  setIsSavingInfos(true);
+
+  try {
+    const result = await mettreAJourInfosAgent({
+      agentId: Number(selectedAgentId),
+      matricule: infosAgentForm.matricule.trim() || undefined,
+      poste: infosAgentForm.poste.trim() || undefined,
+      grade: infosAgentForm.grade.trim() || undefined,
+    });
+
+    notifierAction(setInfosFeedback, 'success', result.message);
+    await loadAgents();
+  } catch (error) {
+    notifierAction(
+      setInfosFeedback,
+      'error',
+      error?.message || 'Impossible de mettre à jour les informations.'
+    );
+  } finally {
+    setIsSavingInfos(false);
+  }
+};
+
+/*
+ * À la sélection d'un agent : pré-remplit ses informations
+ * administratives et charge son historique d'affectation.
+ */
+useEffect(() => {
+  if (!selectedAgentId) {
+    setInfosAgentForm({ matricule: '', poste: '', grade: '' });
+    setHistoriqueAffectations([]);
+    setInfosFeedback(null);
+    return;
+  }
+
+  const agent = agentsList.find((a) => String(a.id) === String(selectedAgentId));
+
+  setInfosAgentForm({
+    matricule: agent?.matricule || '',
+    poste: agent?.poste || '',
+    grade: agent?.grade || '',
+  });
+
+  fetchHistoriqueAffectations(selectedAgentId)
+    .then(setHistoriqueAffectations)
+    .catch(() => setHistoriqueAffectations([]));
+}, [selectedAgentId, agentsList]);
 
   useEffect(() => {
   return () => {
@@ -209,9 +381,8 @@ useEffect(() => {
 
   useEffect(() => {
     loadDemandes({ silent: true });
-    chargerStatistiques();
     fetchServices().then(setServices);
-  }, [loadDemandes, chargerStatistiques]);
+  }, [loadDemandes]);
 
   useEffect(() => {
     if (activePage === 'requests') {
@@ -220,25 +391,18 @@ useEffect(() => {
   }, [activePage, loadDemandes]);
 
   useEffect(() => {
-    if (activePage === 'notes') {
-      loadNotesAdmin();
-    }
-  }, [activePage, notesMoisAdmin, notesAnneeAdmin]);
-
-  useEffect(() => {
     if (activePage === 'parametres') {
-      getZoneGps()
-        .then((data) => {
-          if (data) {
-            setGpsConfig({
-              latitude: data.latitude.toString(),
-              longitude: data.longitude.toString(),
-              rayonKm: data.rayonKm.toString(),
-              nomLieu: data.nomLieu || '',
-              nombrePointagesParJour: data.nombrePointagesParJour || 1,
-              modeTestSansZone: Boolean(data.modeTestSansZone),
-            });
-          }
+      loadJoursFeries();
+      getGpsConfig()
+        .then((configData) => {
+          setGpsConfig({
+            latitude: (configData?.latitude ?? '').toString(),
+            longitude: (configData?.longitude ?? '').toString(),
+            rayonKm: (configData?.rayonKm ?? '').toString(),
+            nomLieu: configData?.nom || '',
+            nombrePointagesParJour: configData?.nombrePointagesParJour || 1,
+            modeTestSansZone: Boolean(configData?.modeTestSansZone),
+          });
         })
         .catch((err) => console.error("Erreur de récupération de la configuration GPS :", err));
     }
@@ -289,20 +453,37 @@ useEffect(() => {
     setIsUpdatingGps(true);
 
     try {
-      const payload = {
-        latitude: parseFloat(gpsConfig.latitude),
-        longitude: parseFloat(gpsConfig.longitude),
+      let latitude = parseFloat(gpsConfig.latitude);
+      let longitude = parseFloat(gpsConfig.longitude);
+      const nomLieu = gpsConfig.nomLieu.trim();
+
+      /*
+       * Pour un lieu prédéfini, on re-résout systématiquement
+       * les coordonnées au moment de la soumission : si l'admin
+       * a sélectionné un lieu puis soumis très rapidement, le
+       * fetch déclenché par le select peut ne pas être terminé
+       * et gpsConfig.latitude/longitude seraient encore celles
+       * de l'ancien lieu.
+       */
+      if (nomLieu && nomLieu !== 'Autre') {
+        const lieu = await getLieuByName(nomLieu);
+
+        if (lieu && lieu.latitude && lieu.longitude) {
+          latitude = lieu.latitude;
+          longitude = lieu.longitude;
+        }
+      }
+
+      const configPayload = {
+        nomLieu,
+        latitude,
+        longitude,
         rayonKm: parseFloat(gpsConfig.rayonKm),
         nombrePointagesParJour: Number(gpsConfig.nombrePointagesParJour),
         modeTestSansZone: gpsConfig.modeTestSansZone,
       };
 
-      const response = await updateZoneGps(payload);
-
-      setGpsConfig((current) => ({
-        ...current,
-        nomLieu: response?.nomLieu || current.nomLieu,
-      }));
+      await updateGpsConfig(configPayload);
 
       notifierAction(setGpsFeedback, 'success', 'Paramètres de pointage mis à jour avec succès.');
     } catch (error) {
@@ -386,7 +567,7 @@ useEffect(() => {
       setIsCreatingChef(false);
     }
   };
-  const loadNotesAdmin = async ({ silent = false } = {}) => {
+  const loadNotesAdmin = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setIsLoadingNotesAdmin(true);
     try {
       const [chefs, agents] = await Promise.all([
@@ -407,7 +588,13 @@ useEffect(() => {
     } finally {
       if (!silent) setIsLoadingNotesAdmin(false);
     }
-  };
+  }, [notesMoisAdmin, notesAnneeAdmin]);
+
+  useEffect(() => {
+    if (activePage === 'notes') {
+      loadNotesAdmin();
+    }
+  }, [activePage, loadNotesAdmin]);
 
   const handleCalculerNoteChef = async (chefId) => {
     setIsCalculatingAdmin((c) => ({ ...c, [chefId]: true }));
@@ -444,7 +631,7 @@ useEffect(() => {
       return (
         <div className="dashboard-placeholder">
           <strong>Chargement des demandes</strong>
-          <span>Connexion au backend en cours...</span>
+          <span>Chargement des données en cours...</span>
         </div>
       );
     }
@@ -542,7 +729,7 @@ useEffect(() => {
         </div>
 
         <div className="stats-item">
-          <label>Chefs de service</label>
+          <label>Services</label>
           <strong>{services.length}</strong>
         </div>
 
@@ -569,79 +756,6 @@ useEffect(() => {
     </section>
   </>
 );
-
-  const PIE_COLORS = ['#2d6b47', '#c9912b', '#c44545'];
-
-  function renderRepartitionChart(stats) {
-    const presentesNettes = Math.max(
-      0,
-      stats.nombrePresences - stats.nombreRetards
-    );
-
-    const data = [
-      { name: 'Présents', value: presentesNettes },
-      { name: 'Retards', value: stats.nombreRetards },
-      { name: 'Absences', value: stats.nombreAbsences || 0 },
-    ];
-
-    const total = data.reduce((sum, d) => sum + d.value, 0);
-
-    if (total === 0) {
-      return (
-        <div className="dashboard-placeholder dashboard-placeholder-muted">
-          <strong>Pas encore de données</strong>
-          <span>Le graphique s'affichera dès les premiers pointages enregistrés.</span>
-        </div>
-      );
-    }
-
-    return (
-      <ResponsiveContainer width="100%" height={260}>
-        <PieChart>
-          <Pie
-            data={data}
-            dataKey="value"
-            nameKey="name"
-            cx="50%"
-            cy="50%"
-            outerRadius={90}
-            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-          >
-            {data.map((entry, index) => (
-              <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-            ))}
-          </Pie>
-          <Tooltip />
-          <Legend />
-        </PieChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  function renderEvolutionChart(stats) {
-    const data = stats.evolutionMensuelle || [];
-
-    if (data.length === 0) {
-      return (
-        <div className="dashboard-placeholder dashboard-placeholder-muted">
-          <strong>Pas encore de données</strong>
-          <span>L'évolution apparaîtra dès qu'un historique de plusieurs mois existera.</span>
-        </div>
-      );
-    }
-
-    return (
-      <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="mois" />
-          <YAxis domain={[0, 100]} unit="%" />
-          <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
-          <Bar dataKey="tauxPonctualite" fill="#2d6b47" radius={[6, 6, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    );
-  }
 
   const renderRequests = () => (
     <section className="dashboard-panel dashboard-panel-wide">
@@ -781,6 +895,197 @@ useEffect(() => {
     </section>
   );
 
+const formatLogDate = (value) => {
+  if (!value) return '—';
+
+  const date = Array.isArray(value)
+    ? new Date(value[0], value[1] - 1, value[2], value[3] || 0, value[4] || 0, value[5] || 0)
+    : new Date(value);
+
+  if (Number.isNaN(date.getTime())) return '—';
+
+  return date.toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const filteredLogs = logs.filter((log) => {
+  const matchesCategorie =
+    logCategorieFilter === 'Toutes les catégories' ||
+    log.categorie === logCategorieFilter;
+
+  const query = logSearchQuery.trim().toLowerCase();
+  const matchesQuery =
+    !query ||
+    (log.action || '').toLowerCase().includes(query) ||
+    (log.utilisateur || '').toLowerCase().includes(query);
+
+  return matchesCategorie && matchesQuery;
+});
+
+const renderAffectationPanel = () => (
+  <section className="dashboard-panel dashboard-panel-wide">
+    <div className="admin-section-head">
+      <div>
+        <h2>Affecter un membre du personnel à un service</h2>
+        <p className="panel-note">
+          Change le service d'un agent ou d'un chef de service. L'intéressé en est notifié et l'action est tracée dans les journaux.
+        </p>
+      </div>
+      <span className="dashboard-status-pill">{agentsList.length} personne(s)</span>
+    </div>
+
+    {affectationFeedback && (
+      <div className={affectationFeedback.type === 'error' ? 'form-error' : 'form-success'} style={{ margin: '0.75rem 0' }}>
+        {affectationFeedback.message}
+      </div>
+    )}
+
+    {isLoadingAgents ? (
+      <div className="dashboard-placeholder">
+        <strong>Chargement du personnel</strong>
+      </div>
+    ) : (
+      <form onSubmit={handleAffecterService} className="admin-form-grid">
+        <label className="field-input-wrap field-input-wrap-plain">
+          <span>Agent</span>
+          <select
+            value={selectedAgentId}
+            onChange={(e) => setSelectedAgentId(e.target.value)}
+            required
+          >
+            <option value="">Sélectionner un agent ou un chef de service</option>
+            {agentsList.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {getFullName(agent)}
+                {agent.service?.nom ? ` — actuellement : ${agent.service.nom}` : ' — aucun service'}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field-input-wrap field-input-wrap-plain">
+          <span>Nouveau service</span>
+          <select
+            value={selectedServiceId}
+            onChange={(e) => setSelectedServiceId(e.target.value)}
+            required
+          >
+            <option value="">Sélectionner un service</option>
+            {services.map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.nom}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="admin-form-actions">
+          <button type="submit" className="primary-button" disabled={isAffecting}>
+            {isAffecting ? 'Affectation en cours...' : "Affecter"}
+          </button>
+        </div>
+      </form>
+    )}
+
+    {selectedAgentId && (
+      <div className="admin-overview-grid" style={{ marginTop: '1.5rem' }}>
+
+        <div className="dashboard-placeholder" style={{ margin: 0 }}>
+          <strong>Informations administratives</strong>
+          <p className="panel-note">
+            Matricule, poste et grade de l'agent. Ces informations figurent dans les rapports PDF.
+          </p>
+
+          {infosFeedback && (
+            <div className={infosFeedback.type === 'error' ? 'form-error' : 'form-success'} style={{ margin: '0.75rem 0' }}>
+              {infosFeedback.message}
+            </div>
+          )}
+
+          <form className="parametres-form" onSubmit={handleInfosAgentSubmit} style={{ marginTop: '0.75rem' }}>
+            <div className="dashboard-field">
+              <span>Matricule</span>
+              <input
+                type="text"
+                value={infosAgentForm.matricule}
+                onChange={(e) => setInfosAgentForm((c) => ({ ...c, matricule: e.target.value }))}
+                placeholder="Matricule de l'agent"
+              />
+            </div>
+
+            <div className="parametres-form-grid">
+              <div className="dashboard-field">
+                <span>Poste</span>
+                <input
+                  type="text"
+                  value={infosAgentForm.poste}
+                  onChange={(e) => setInfosAgentForm((c) => ({ ...c, poste: e.target.value }))}
+                  placeholder="Poste occupé"
+                />
+              </div>
+
+              <div className="dashboard-field">
+                <span>Grade</span>
+                <input
+                  type="text"
+                  value={infosAgentForm.grade}
+                  onChange={(e) => setInfosAgentForm((c) => ({ ...c, grade: e.target.value }))}
+                  placeholder="Grade"
+                />
+              </div>
+            </div>
+
+            <button type="submit" className="primary-action-button" disabled={isSavingInfos} style={{ marginTop: '1rem', width: '100%' }}>
+              {isSavingInfos ? 'Enregistrement...' : 'Enregistrer les informations'}
+            </button>
+          </form>
+        </div>
+
+        <div className="dashboard-placeholder admin-historique-card" style={{ margin: 0 }}>
+          <strong>Historique des affectations</strong>
+          <p className="panel-note">
+            Chaque rattachement de cet agent à un service, du plus récent au plus ancien.
+          </p>
+
+          {historiqueAffectations.length === 0 ? (
+            <p className="admin-historique-vide">
+              Aucune affectation enregistrée pour cet agent. L'historique démarrera
+              à sa prochaine affectation.
+            </p>
+          ) : (
+            <ul className="admin-historique-liste">
+              {historiqueAffectations.map((affectation) => (
+                <li
+                  key={affectation.id}
+                  className={affectation.actif ? 'est-actif' : undefined}
+                >
+                  <div className="admin-historique-ligne">
+                    <strong>{affectation.service?.nom || 'Service inconnu'}</strong>
+                    {affectation.actif && (
+                      <span className="admin-historique-badge">En cours</span>
+                    )}
+                  </div>
+                  <span>
+                    {affectation.actif
+                      ? `Depuis le ${formatDateCourte(affectation.dateDebut)}`
+                      : `Du ${formatDateCourte(affectation.dateDebut)} au ${formatDateCourte(affectation.dateFin)}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+      </div>
+    )}
+  </section>
+);
+
 const renderLogs = () => (
   <section className="dashboard-panel dashboard-panel-wide">
 
@@ -793,7 +1098,7 @@ const renderLogs = () => (
       </div>
 
       <span className="dashboard-status-pill">
-        {logs.length} activités
+        {filteredLogs.length} activités
       </span>
     </div>
 
@@ -809,6 +1114,8 @@ const renderLogs = () => (
       <input
         type="text"
         placeholder="Rechercher une action..."
+        value={logSearchQuery}
+        onChange={(e) => setLogSearchQuery(e.target.value)}
         style={{
           flex: 1,
           padding: "10px",
@@ -818,6 +1125,8 @@ const renderLogs = () => (
       />
 
       <select
+        value={logCategorieFilter}
+        onChange={(e) => setLogCategorieFilter(e.target.value)}
         style={{
           padding: "10px",
           borderRadius: "8px",
@@ -830,8 +1139,13 @@ const renderLogs = () => (
         <option>Rapport</option>
       </select>
 
-      <button className="primary-button">
-        Actualiser
+      <button
+        type="button"
+        className="primary-button"
+        onClick={loadJournaux}
+        disabled={isLoadingLogs}
+      >
+        {isLoadingLogs ? 'Actualisation...' : 'Actualiser'}
       </button>
 
     </div>
@@ -854,11 +1168,11 @@ const renderLogs = () => (
 
         <tbody>
 
-          {logs.map((log) => (
+          {filteredLogs.map((log) => (
 
             <tr key={log.id}>
 
-              <td>{log.date}</td>
+              <td>{formatLogDate(log.dateAction)}</td>
 
               <td>{log.utilisateur}</td>
 
@@ -868,7 +1182,7 @@ const renderLogs = () => (
 
                 <span className="admin-table-pill">
 
-                  {log.type}
+                  {log.categorie}
 
                 </span>
 
@@ -919,6 +1233,11 @@ const renderLogs = () => (
 
         {/* SECTION 1 : PROFIL DE L'ADMINISTRATEUR */}
         <div className="profil-section-wrap" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="dashboard-placeholder" style={{ margin: 0 }}>
+            <strong>Photo de profil</strong>
+            <PhotoUploadInput />
+          </div>
+
           <div className="dashboard-placeholder" style={{ margin: 0 }}>
             <strong>Informations de compte actuelles</strong>
             <div className="profil-info-grid" style={{ marginTop: '0.75rem' }}>
@@ -1012,16 +1331,86 @@ const renderLogs = () => (
             <form className="gps-form" onSubmit={handleGpsSubmit} style={{ marginTop: '1rem' }}>
 
               <div className="dashboard-field">
-                <span>Lieu actuel autorisé</span>
-                <input
-                  type="text"
-                  value={gpsConfig.nomLieu || 'Lieu non défini'}
-                  readOnly
-                  style={{ background: '#f5f6f0', cursor: 'not-allowed' }}
-                />
+                <span>Lieu de pointage autorisé</span>
+                {gpsConfig.nomLieu && gpsConfig.nomLieu === 'Autre' ? (
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={gpsConfig.lieuCustom || ''}
+                      placeholder="Nom du lieu..."
+                      style={{ width: '100%', paddingRight: '2.25rem', boxSizing: 'border-box' }}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setGpsConfig((c) => ({ ...c, lieuCustom: newValue }));
+
+                        if (newValue.trim().length > 0) {
+                          getLieuByName(newValue).then((data) => {
+                            if (data && data.latitude && data.longitude) {
+                              setGpsConfig((c) => ({
+                                ...c,
+                                nomLieu: data.nom,
+                                latitude: data.latitude,
+                                longitude: data.longitude
+                              }));
+                            }
+                          });
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setGpsConfig((c) => ({ ...c, nomLieu: "Ministère de l'Économie et des Finances", lieuCustom: '' }))}
+                      title="Revenir à la liste des lieux"
+                      style={{
+                        position: 'absolute',
+                        right: '0.5rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        color: '#555',
+                        padding: '0.25rem',
+                      }}
+                    >
+                      ▼
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={gpsConfig.nomLieu || "Ministère de l'Économie et des Finances"}
+                    onChange={(e) => {
+                      const selectedNom = e.target.value;
+
+                      if (selectedNom === 'autre') {
+                        setGpsConfig((c) => ({ ...c, nomLieu: 'Autre', lieuCustom: '' }));
+                      } else if (selectedNom) {
+                        getLieuByName(selectedNom).then((data) => {
+                          if (data && data.latitude && data.longitude) {
+                            setGpsConfig((c) => ({
+                              ...c,
+                              nomLieu: data.nom,
+                              latitude: data.latitude,
+                              longitude: data.longitude
+                            }));
+                          }
+                        });
+                      }
+                    }}
+                    required
+                  >
+                    <option value="Ministère de l'Économie et des Finances">Ministère de l'Économie et des Finances</option>
+                    <option value="Dantokpa">Dantokpa</option>
+                    <option value="Gbegamey">Gbegamey</option>
+                    <option value="CEG Les Pylônes">CEG Les Pylônes</option>
+                    <option value="Agla">Agla</option>
+                    <option value="autre">Autre (à spécifier)</option>
+                  </select>
+                )}
               </div>
 
-              <div className="parametres-form-grid" style={{ marginTop: '1rem' }}>
+              <div className="parametres-form-grid" style={{ marginTop: '1rem', display: 'none' }}>
                 <div className="dashboard-field">
                   <span>Latitude</span>
                   <input
@@ -1070,7 +1459,6 @@ const renderLogs = () => (
                 >
                   <option value={1}>1 fois (matin)</option>
                   <option value={2}>2 fois (matin et soir)</option>
-                  <option value={3}>3 fois (matin, midi, soir)</option>
                 </select>
               </div>
 
@@ -1108,6 +1496,82 @@ const renderLogs = () => (
           </div>
         </div>
 
+      </div>
+
+      {/*
+        * Les fêtes à date fixe et les fêtes chrétiennes mobiles sont
+        * calculées par le système. Seules les fêtes musulmanes, dont
+        * la date est confirmée par communiqué officiel, doivent être
+        * saisies ici.
+        */}
+      <div className="dashboard-placeholder" style={{ marginTop: '1.5rem' }}>
+        <strong>Jours fériés à déclarer</strong>
+        <p className="panel-note">
+          Le 1er et le 10 janvier, le 1er mai, le 1er et le 15 août, le 1er novembre,
+          le 25 décembre, ainsi que le lundi de Pâques, l'Ascension et le lundi de
+          Pentecôte sont déjà reconnus automatiquement. Ajoute ici les fêtes
+          musulmanes (Maouloud, Aïd el-Fitr, Aïd el-Kébir) et les journées chômées
+          exceptionnelles, dès que leur date est officialisée.
+        </p>
+
+        {ferieFeedback && (
+          <div className={ferieFeedback.type === 'error' ? 'form-error' : 'form-success'} style={{ margin: '0.75rem 0' }}>
+            {ferieFeedback.message}
+          </div>
+        )}
+
+        <form className="admin-form-grid" onSubmit={handleDeclarerJourFerie} style={{ marginTop: '0.75rem' }}>
+          <label className="field-input-wrap field-input-wrap-plain">
+            <span>Date</span>
+            <input
+              type="date"
+              value={ferieForm.date}
+              onChange={(e) => setFerieForm((c) => ({ ...c, date: e.target.value }))}
+              required
+            />
+          </label>
+
+          <label className="field-input-wrap field-input-wrap-plain">
+            <span>Libellé</span>
+            <input
+              type="text"
+              value={ferieForm.libelle}
+              onChange={(e) => setFerieForm((c) => ({ ...c, libelle: e.target.value }))}
+              placeholder="Ex. : Aïd el-Fitr"
+              required
+            />
+          </label>
+
+          <div className="admin-form-actions">
+            <button type="submit" className="primary-button" disabled={isSavingFerie}>
+              {isSavingFerie ? 'Enregistrement...' : 'Déclarer le jour férié'}
+            </button>
+          </div>
+        </form>
+
+        {joursFeries.length === 0 ? (
+          <p className="admin-historique-vide">
+            Aucun jour férié déclaré pour le moment.
+          </p>
+        ) : (
+          <ul className="admin-historique-liste">
+            {joursFeries.map((jour) => (
+              <li key={jour.id}>
+                <div className="admin-historique-ligne">
+                  <strong>{jour.libelle}</strong>
+                  <button
+                    type="button"
+                    className="admin-mini-button admin-mini-button-danger"
+                    onClick={() => handleSupprimerJourFerie(jour)}
+                  >
+                    Retirer
+                  </button>
+                </div>
+                <span>{formatDateCourte(jour.date)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </section>
   );
@@ -1365,6 +1829,10 @@ const renderLogs = () => (
       return renderCreateChef();
     }
 
+    if (activePage === 'affectation') {
+      return renderAffectationPanel();
+    }
+
     if (activePage === 'logs') {
       return renderLogs();
     }
@@ -1407,11 +1875,38 @@ const renderLogs = () => (
         </div>
       )}
 
-      <Sidebar role="ADMIN" activePage={activePage} onChangePage={setActivePage} items={ADMIN_ITEMS} user={user}
-        onLogout={logout} />
+      <div className={`sidebar-drawer ${sidebarOpen ? 'open' : ''}`}>
+        <button
+          type="button"
+          className="dashboard-close-btn"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Fermer le menu"
+        >
+          ✕
+        </button>
+        <Sidebar role="ADMIN" activePage={activePage} onChangePage={handlePageChange} items={ADMIN_ITEMS} user={user}
+          onLogout={logout} />
+      </div>
+
+      {sidebarOpen && (
+        <div
+          className="dashboard-overlay"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       <main className="dashboard-main dashboard-main-clean">
         <div className="dashboard-topbar">
+          <button
+            type="button"
+            className="dashboard-menu-btn"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Ouvrir le menu"
+            aria-expanded={sidebarOpen}
+          >
+            ☰
+          </button>
+
           <div className="dashboard-topbar-actions">
             <span className="app-user-chip">{user?.role || 'ADMIN'}</span>
 
@@ -1431,7 +1926,7 @@ const renderLogs = () => (
             <button
               type="button"
               className="nav-profile-button"
-              onClick={() => setActivePage('parametres')}
+              onClick={() => handlePageChange('parametres')}
               aria-label="Ouvrir mon profil"
               title="Ouvrir mon profil"
             >

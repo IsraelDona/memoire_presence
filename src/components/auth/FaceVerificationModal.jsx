@@ -1,28 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { verifyFaceImage } from '../../services/faceService';
 
-const overlayStyle = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(15, 23, 42, 0.68)',
-  backdropFilter: 'blur(8px)',
-  zIndex: 1200,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '24px',
-};
-
-const modalStyle = {
-  width: 'min(1180px, 100%)',
-  maxHeight: '92vh',
-  overflow: 'auto',
-  borderRadius: '28px',
-  background: '#fff',
-  boxShadow: '0 30px 80px rgba(15, 23, 42, 0.35)',
-  padding: '28px',
-};
-
 function FaceVerificationModal(props) {
   const open = props.open ?? props.isOpen ?? props.visible ?? props.show ?? false;
   const onClose = props.onClose ?? props.onCancel ?? props.onDismiss;
@@ -187,8 +165,8 @@ function FaceVerificationModal(props) {
   }
 
   return (
-    <div style={overlayStyle}>
-      <div style={modalStyle}>
+    <div className="face-verification-overlay">
+      <div className="face-verification-modal">
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -240,72 +218,79 @@ function FaceVerificationModal(props) {
           </button>
         </div>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.6fr) minmax(320px, 0.8fr)',
-          gap: '18px',
-          alignItems: 'stretch',
-        }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{
-              position: 'relative',
-              borderRadius: '26px',
-              overflow: 'hidden',
-              minHeight: '620px',
-              background: 'linear-gradient(180deg, #eaf2ff 0%, #f5f9ff 100%)',
-              border: '1px solid rgba(168, 190, 221, 0.55)',
-            }}>
-              {canShowVideo ? (
-                <video
-                  key={cameraKey}
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    minHeight: '620px',
-                    objectFit: 'cover',
-                    display: 'block',
-                    background: '#dfe9fb',
-                  }}
-                />
-              ) : (
-                <img
-                  src={capturedImage}
-                  alt="Aperçu capturé"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    minHeight: '620px',
-                    objectFit: 'cover',
-                    display: 'block',
-                    background: '#dfe9fb',
-                  }}
-                />
-              )}
+        <div style={{ minWidth: 0 }}>
+          <div className="face-verification-video-wrap">
+            {canShowVideo ? (
+              <video
+                key={cameraKey}
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+              />
+            ) : (
+              <img
+                src={capturedImage}
+                alt="Aperçu capturé"
+              />
+            )}
 
-              <div style={{
-                position: 'absolute',
-                left: '24px',
-                right: '24px',
-                bottom: '22px',
-                borderRadius: '24px',
-                background: 'rgba(16, 24, 40, 0.55)',
-                backdropFilter: 'blur(18px)',
-                padding: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px',
-                flexWrap: 'wrap',
-              }}>
-                {!capturedImage ? (
+            <div style={{
+              position: 'absolute',
+              left: '24px',
+              right: '24px',
+              bottom: '22px',
+              borderRadius: '24px',
+              background: 'rgba(16, 24, 40, 0.55)',
+              backdropFilter: 'blur(18px)',
+              padding: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+            }}>
+              {!capturedImage ? (
+                <button
+                  type="button"
+                  onClick={handleCapture}
+                  disabled={isStarting}
+                  style={{
+                    border: 'none',
+                    background: '#2f6fca',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: '1rem',
+                    padding: '14px 22px',
+                    borderRadius: '14px',
+                    cursor: isStarting ? 'wait' : 'pointer',
+                    boxShadow: '0 12px 24px rgba(47, 111, 202, 0.28)',
+                  }}
+                >
+                  {captureLabel}
+                </button>
+              ) : (
+                <>
                   <button
                     type="button"
-                    onClick={handleCapture}
-                    disabled={isStarting}
+                    onClick={handleRetake}
+                    style={{
+                      border: 'none',
+                      background: '#e9eef9',
+                      color: '#13294b',
+                      fontWeight: 700,
+                      fontSize: '1rem',
+                      padding: '14px 22px',
+                      borderRadius: '14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Reprendre la photo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleVerify}
+                    disabled={isVerifying}
                     style={{
                       border: 'none',
                       background: '#2f6fca',
@@ -314,123 +299,29 @@ function FaceVerificationModal(props) {
                       fontSize: '1rem',
                       padding: '14px 22px',
                       borderRadius: '14px',
-                      cursor: isStarting ? 'wait' : 'pointer',
+                      cursor: isVerifying ? 'wait' : 'pointer',
                       boxShadow: '0 12px 24px rgba(47, 111, 202, 0.28)',
                     }}
                   >
-                    {captureLabel}
+                    {isVerifying ? 'Vérification...' : 'Vérifier le visage'}
                   </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleRetake}
-                      style={{
-                        border: 'none',
-                        background: '#e9eef9',
-                        color: '#13294b',
-                        fontWeight: 700,
-                        fontSize: '1rem',
-                        padding: '14px 22px',
-                        borderRadius: '14px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Reprendre la photo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleVerify}
-                      disabled={isVerifying}
-                      style={{
-                        border: 'none',
-                        background: '#2f6fca',
-                        color: '#fff',
-                        fontWeight: 700,
-                        fontSize: '1rem',
-                        padding: '14px 22px',
-                        borderRadius: '14px',
-                        cursor: isVerifying ? 'wait' : 'pointer',
-                        boxShadow: '0 12px 24px rgba(47, 111, 202, 0.28)',
-                      }}
-                    >
-                      {isVerifying ? 'Vérification...' : 'Vérifier le visage'}
-                    </button>
-                  </>
-                )}
-              </div>
+                </>
+              )}
             </div>
           </div>
 
-          <div style={{
-            display: 'grid',
-            gap: '18px',
-            alignContent: 'start',
-          }}>
-            <div style={infoCardStyle}>
-              <h3 style={cardTitleStyle}>Consignes</h3>
-              <p style={cardTextStyle}>
-                Place ton visage au centre, évite les contre-jours et reste immobile pendant la capture.
-              </p>
-            </div>
+          {statusMessage ? (
+            <div style={{ ...successCardStyle, marginTop: '16px' }}>{statusMessage}</div>
+          ) : null}
 
-            <div style={infoCardStyle}>
-              <h3 style={cardTitleStyle}>Statut</h3>
-              <p style={cardTextStyle}>
-                {capturedImage
-                  ? 'Image capturée. Clique sur Vérifier le visage pour lancer le pointage.'
-                  : isStarting
-                    ? 'Ouverture de la caméra...'
-                    : 'Positionne ton visage au centre et clique sur Capturer le visage.'}
-              </p>
-            </div>
-
-            {statusMessage ? (
-              <div style={successCardStyle}>{statusMessage}</div>
-            ) : null}
-
-            {errorMessage ? (
-              <div style={errorCardStyle}>{errorMessage}</div>
-            ) : null}
-
-            {capturedImage ? (
-              <div style={infoCardStyle}>
-                <h3 style={cardTitleStyle}>Aperçu capturé</h3>
-                <p style={cardTextStyle}>Tu peux recommencer si le cadrage n’est pas bon.</p>
-                <button
-                  type="button"
-                  onClick={handleRetake}
-                  style={{
-                    width: '100%',
-                    marginTop: '10px',
-                    border: 'none',
-                    background: '#e9eef9',
-                    color: '#13294b',
-                    fontWeight: 700,
-                    fontSize: '1rem',
-                    padding: '14px 18px',
-                    borderRadius: '14px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Reprendre la photo
-                </button>
-              </div>
-            ) : null}
-          </div>
+          {errorMessage ? (
+            <div style={{ ...errorCardStyle, marginTop: '16px' }}>{errorMessage}</div>
+          ) : null}
         </div>
       </div>
     </div>
   );
 }
-
-const infoCardStyle = {
-  borderRadius: '24px',
-  border: '1px dashed rgba(168, 190, 221, 0.6)',
-  background: '#fff',
-  padding: '22px',
-  boxShadow: '0 12px 40px rgba(15, 23, 42, 0.04)',
-};
 
 const successCardStyle = {
   borderRadius: '18px',
@@ -448,19 +339,6 @@ const errorCardStyle = {
   color: '#b91c1c',
   padding: '16px 18px',
   fontWeight: 600,
-};
-
-const cardTitleStyle = {
-  margin: 0,
-  color: '#13294b',
-  fontSize: '1.02rem',
-  fontWeight: 800,
-};
-
-const cardTextStyle = {
-  margin: '10px 0 0',
-  color: '#54627d',
-  lineHeight: 1.6,
 };
 
 export default FaceVerificationModal;

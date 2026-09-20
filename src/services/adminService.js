@@ -81,9 +81,77 @@ async function fetchStatistiquesGlobales() {
   return response.data;
 }
 
+async function fetchTousLesAgents() {
+  const response = await api.get('/api/admin/agents');
+
+  return normalizeList(response?.data);
+}
+
+async function affecterAgentAService({ agentId, serviceId }) {
+  const response = await api.post('/api/admin/affecter-service', {
+    agentId,
+    serviceId,
+  });
+
+  return {
+    message: readApiMessage(response?.data, 'Agent affecté avec succès'),
+    status: response?.status,
+  };
+}
+
+async function mettreAJourInfosAgent({ agentId, matricule, poste, grade }) {
+  const response = await api.post('/api/admin/agent-infos', {
+    agentId,
+    matricule,
+    poste,
+    grade,
+  });
+
+  return {
+    message: readApiMessage(response?.data, 'Informations mises à jour'),
+    status: response?.status,
+  };
+}
+
+async function fetchHistoriqueAffectations(agentId) {
+  const response = await api.get(`/api/admin/agents/${agentId}/affectations`);
+
+  return normalizeList(response?.data);
+}
+
+
+async function fetchJoursFeries() {
+  const response = await api.get('/api/admin/jours-feries');
+  return normalizeList(response?.data);
+}
+
+async function declarerJourFerie({ date, libelle }) {
+  const response = await api.post('/api/admin/jours-feries', { date, libelle });
+
+  return {
+    message: readApiMessage(response?.data, 'Jour férié enregistré'),
+    status: response?.status,
+  };
+}
+
+async function supprimerJourFerie(id) {
+  const response = await api.delete('/api/admin/jours-feries/' + id);
+
+  return {
+    message: readApiMessage(response?.data, 'Jour férié supprimé'),
+    status: response?.status,
+  };
+}
 export {
   creerChefService,
   fetchDemandesComptes,
   fetchStatistiquesGlobales,
   traiterDemandeCompte,
+  fetchTousLesAgents,
+  affecterAgentAService,
+  mettreAJourInfosAgent,
+  fetchHistoriqueAffectations,
+  fetchJoursFeries,
+  declarerJourFerie,
+  supprimerJourFerie,
 };

@@ -14,7 +14,7 @@ function Header() {
   return (
     <header className="app-topbar">
       <Link to="/" className="app-brand" aria-label="e-presence accueil">
-        <span className="app-brand-mark">DGB</span>
+        <span className="app-brand-mark">DI</span>
         <span className="app-brand-text">
           <strong>e-presence</strong>
           <span>Gestion des présences</span>

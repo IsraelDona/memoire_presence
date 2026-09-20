@@ -10,6 +10,11 @@ export async function updateMonProfil(data) {
   return response.data;
 }
 
+export async function getMonChefService() {
+  const response = await api.get('/api/profil/chef-service');
+  return response.data;
+}
+
 export async function updatePhotoProfil(photoProfil) {
   const response = await api.patch(
     '/api/profil/photo',

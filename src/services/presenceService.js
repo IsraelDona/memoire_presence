@@ -46,10 +46,25 @@ async function marquerPresence(payload) {
       status === 400
         ? "Vous avez déjà pointé aujourd'hui."
         : status === 403
-          ? 'Pointage refusé par le backend.'
+          ? 'Pointage refusé.'
           : 'Impossible de marquer la présence. Vérifie ta connexion.';
 
     throw new Error(readApiMessage(error?.response?.data, fallback));
+  }
+}
+
+async function verifierZone(payload) {
+  try {
+    const response = await api.post('/api/presences/verifier-zone', payload);
+
+    return {
+      message: readApiMessage(response?.data, 'Zone autorisée'),
+      status: response?.status,
+    };
+  } catch (error) {
+    throw new Error(
+      readApiMessage(error?.response?.data, 'Impossible de vérifier la zone de pointage.')
+    );
   }
 }
 
@@ -63,7 +78,14 @@ async function fetchMesPresences() {
   };
 }
 
+
+async function fetchContexteDuJour() {
+  const response = await api.get('/api/presences/contexte-jour');
+  return response?.data || null;
+}
 export {
   fetchMesPresences,
   marquerPresence,
+  verifierZone,
+  fetchContexteDuJour,
 };
