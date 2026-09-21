@@ -716,7 +716,7 @@ function DirecteurDashboard() {
           <span>Récupération des scores en cours...</span>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '24px' }}>
+        <div className="admin-classements-grid">
           <div>
             {renderClassementBlock(classementChefs, `Chefs de service — ${MOIS_NOMS[notesMoisAdmin - 1]} ${notesAnneeAdmin}`)}
           </div>

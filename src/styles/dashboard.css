@@ -1994,3 +1994,204 @@
   background: #fff;
   padding: 20px 24px 24px;
 }
+
+/* =====================================================
+   RESPONSIVE — TABLEAUX DE BORD
+   =====================================================
+   Trois causes rendaient ces ecrans inutilisables en mobile :
+   une barre superieure translucide qui laissait defiler le
+   contenu derriere elle, des marges negatives calees sur le
+   padding du bureau, et des grilles a deux colonnes ecrites
+   en style inline — qu'aucune media query ne pouvait donc
+   surcharger. Les styles inline ont ete retires du JSX, le
+   reste se regle ici.
+   ===================================================== */
+
+/* Fond opaque : le contenu ne transparait plus au defilement. */
+.dashboard-topbar {
+  background: #f8fafc;
+}
+
+/* La grille des classements, autrefois en style inline. */
+.admin-classements-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 8px;
+}
+
+@media (max-width: 1100px) {
+  /*
+   * La barre debordait de 34px de chaque cote alors que la zone
+   * principale ne conserve que 16px de marge en mobile : la page
+   * devenait plus large que l'ecran, d'ou le defilement lateral
+   * et les cartes coupees a droite.
+   */
+  .dashboard-topbar {
+    margin: -80px -16px 22px;
+    padding: 12px 16px;
+    min-height: 64px;
+  }
+
+  .dashboard-main-clean {
+    padding: 84px 16px 24px;
+    min-width: 0;
+  }
+
+  .dashboard-title {
+    font-size: clamp(1.35rem, 5.2vw, 2rem);
+  }
+
+  .dashboard-panel {
+    padding: 18px 16px;
+  }
+}
+
+@media (max-width: 900px) {
+  /* Toutes les grilles a deux colonnes passent sur une colonne. */
+  .admin-overview-grid,
+  .admin-classements-grid,
+  .parametres-grid,
+  .parametres-form-grid,
+  .auth-grid-two,
+  .admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  /*
+   * En-tete de section : le titre et sa pastille doivent tenir
+   * sur la meme ligne, la description passant dessous sur toute
+   * la largeur. Le titre et la description etant enfermes dans
+   * un meme div, `display: contents` les fait remonter au rang
+   * d'elements de la grille pour qu'ils se placent chacun de
+   * leur cote.
+   */
+  .admin-section-head {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 8px;
+  }
+
+  .admin-section-head > div:first-child {
+    display: contents;
+  }
+
+  .admin-section-head > div:first-child > h2 {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    font-size: 1.15rem;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-section-head > div:first-child > .panel-note {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 0;
+  }
+
+  /*
+   * Pastilles et badges d'etat sont des <span> : ils tiennent
+   * a droite du titre.
+   */
+  .admin-section-head > span {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    white-space: nowrap;
+  }
+
+  .admin-section-head > .dashboard-status-pill {
+    font-size: 0.72rem;
+    padding: 5px 10px;
+  }
+
+  /*
+   * Un bouton d'action est bien plus large qu'une pastille : le
+   * loger en colonne 2 reduisait le titre a un mot par ligne.
+   * Il prend donc sa propre ligne, sur toute la largeur.
+   */
+  .admin-section-head > button,
+  .admin-section-head > a,
+  .admin-section-head > div:not(:first-child) {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  /* Libelle et valeur se chevauchaient faute de place. */
+  .profil-info-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .admin-historique-ligne {
+    flex-wrap: wrap;
+  }
+
+  /* Les tableaux defilent lateralement au lieu d'elargir la page. */
+  .attendance-table-wrap,
+  .admin-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .attendance-table,
+  .admin-table {
+    font-size: 0.86rem;
+  }
+
+  /*
+   * Sans cela, le navigateur comprime chaque colonne jusqu'a
+   * couper les mots en tranches de trois lettres. Les cellules
+   * gardent leur largeur naturelle et le tableau defile.
+   */
+  .attendance-table th,
+  .attendance-table td,
+  .admin-table th,
+  .admin-table td {
+    white-space: nowrap;
+    padding-right: 26px;
+  }
+
+  /*
+   * Les cellules de ces tableaux n'ont aucune marge laterale :
+   * `padding: 12px 0`. En bureau les colonnes sont assez larges
+   * pour que cela ne se voie pas, mais des qu'elles epousent
+   * leur contenu, les textes se touchent — « admin@dgb.com »
+   * colle a « Generation du rapport ». La derniere colonne n'a
+   * pas besoin de cette marge.
+   */
+  .attendance-table th:last-child,
+  .attendance-table td:last-child,
+  .admin-table th:last-child,
+  .admin-table td:last-child {
+    padding-right: 0;
+  }
+
+  /* Le titre d'accueil ne doit pas deborder de l'ecran. */
+  .dashboard-hero-copy h1,
+  .dashboard-welcome h1 {
+    font-size: clamp(1.3rem, 5.5vw, 2rem);
+    overflow-wrap: anywhere;
+  }
+
+  /* Champs de recherche et de filtre sur toute la largeur. */
+  .dashboard-panel .dashboard-field,
+  .dashboard-panel .dashboard-field select,
+  .dashboard-panel .dashboard-field input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Un enfant trop large ne doit jamais elargir son panneau. */
+  .dashboard-panel > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+}

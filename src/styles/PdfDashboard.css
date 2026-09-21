@@ -161,3 +161,67 @@
 .pdf-btn-supprimer:hover {
   background: #fdecea;
 }
+/* =====================================================
+   RESPONSIVE
+   =====================================================
+   Ce composant n'avait aucune media query. En mobile, le
+   bouton « Générer et télécharger » est en `white-space:
+   nowrap` : il refusait de retrecir, et comme la colonne
+   de texte est en `flex: 1` (donc `flex-basis: 0`), c'est
+   elle qui absorbait toute la compression — jusqu'a un mot
+   par ligne. Le tableau, lui, n'avait aucun conteneur de
+   defilement et elargissait la page entiere.
+   ===================================================== */
+
+.pdf-card-left {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .pdf-page {
+    padding: 0;
+    gap: 18px;
+  }
+
+  /* Texte puis bouton, chacun sur toute la largeur. */
+  .pdf-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 20px 18px;
+  }
+
+  .pdf-btn {
+    width: 100%;
+    white-space: normal;
+  }
+
+  .pdf-historique-section {
+    padding: 20px 18px;
+    /* Le tableau defile ici au lieu d'elargir la page. */
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pdf-historique-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .pdf-table {
+    font-size: 13px;
+  }
+
+  /*
+   * Sans cela le navigateur decoupe les noms de fichiers en
+   * tranches de trois lettres pour tenir dans la largeur.
+   */
+  .pdf-table th,
+  .pdf-table td {
+    white-space: nowrap;
+  }
+
+  .pdf-titre {
+    font-size: 18px;
+  }
+}

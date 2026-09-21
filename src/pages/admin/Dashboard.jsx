@@ -740,19 +740,6 @@ useEffect(() => {
 
       </div>
 
-      <div
-        className="dashboard-placeholder"
-        style={{ marginTop: "25px" }}
-      >
-        <strong>Bienvenue dans l'espace administrateur.</strong>
-
-        <span>
-          Utilisez le menu de gauche pour gérer les comptes, consulter les
-          journaux, générer les rapports PDF et configurer le système.
-        </span>
-
-      </div>
-
     </section>
   </>
 );
@@ -1092,9 +1079,6 @@ const renderLogs = () => (
     <div className="admin-section-head">
       <div>
         <h2>Journaux d'activités</h2>
-        <p className="panel-note">
-          Consultez toutes les opérations importantes réalisées dans le système.
-        </p>
       </div>
 
       <span className="dashboard-status-pill">
@@ -1222,14 +1206,11 @@ const renderLogs = () => (
       <div className="admin-section-head">
         <div>
           <h2>Paramètres système & Sécurité</h2>
-          <p className="panel-note">
-            Gère tes accès personnels et configure la barrière géographique globale qui restreint le pointage des agents et chefs de service.
-          </p>
         </div>
         <span className="dashboard-status-pill">Configuration</span>
       </div>
 
-      <div className="parametres-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginTop: '1.5rem' }}>
+      <div className="parametres-grid" style={{ marginTop: '1.5rem' }}>
 
         {/* SECTION 1 : PROFIL DE L'ADMINISTRATEUR */}
         <div className="profil-section-wrap" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -1507,11 +1488,9 @@ const renderLogs = () => (
       <div className="dashboard-placeholder" style={{ marginTop: '1.5rem' }}>
         <strong>Jours fériés à déclarer</strong>
         <p className="panel-note">
-          Le 1er et le 10 janvier, le 1er mai, le 1er et le 15 août, le 1er novembre,
-          le 25 décembre, ainsi que le lundi de Pâques, l'Ascension et le lundi de
-          Pentecôte sont déjà reconnus automatiquement. Ajoute ici les fêtes
-          musulmanes (Maouloud, Aïd el-Fitr, Aïd el-Kébir) et les journées chômées
-          exceptionnelles, dès que leur date est officialisée.
+          Ajoute ici les fêtes musulmanes (Maouloud, Aïd el-Fitr, Aïd el-Kébir)
+          et les journées chômées exceptionnelles, dès que leur date est
+          officialisée.
         </p>
 
         {ferieFeedback && (
@@ -1787,12 +1766,7 @@ const renderLogs = () => (
           )}
 
           {/* Classements */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '24px',
-            marginTop: '8px',
-          }}>
+          <div className="admin-classements-grid">
             <div>
               {renderClassementBlock(
                 classementChefs,

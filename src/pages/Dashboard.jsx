@@ -1092,7 +1092,7 @@ function Dashboard({ user }) {
       
         <div className="dashboard-hero-copy">
           <span className="dashboard-status-pill">{roleContent.subtitle}</span>
-          <h1>Bienvenue,{user?.role || 'role'} {user?.prenom || user?.nom || 'utilisateur'}.</h1>
+          <h1>Bienvenue, {user?.role || 'role'} {user?.prenom || user?.nom || 'utilisateur'}.</h1>
           <p>{roleContent.summary}</p>
         </div>
       
